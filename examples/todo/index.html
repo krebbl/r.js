@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <link href="./css/base.css" rel="stylesheet"/>
+    <link href="./css/index.css" rel="stylesheet"/>
+    <script src="./require.js" type="text/javascript"></script>
+    <script src="./underscore.js" type="text/javascript"></script>
+    <script src="./r/rRequire.js" type="text/javascript"></script>
+    <style type="text/css">
+        .todo-edit-form {
+            display: none;
+        }
+
+        .todo-title {
+            display: inline-block;
+        }
+
+        .editing .todo-edit-form {
+            display: inline-block;
+        }
+
+        .editing .todo-title {
+            display: none;
+        }
+
+        .view {
+            display: block;
+        }
+
+        .edit {
+            display: none;
+        }
+
+        .editing .view {
+            display: none;
+        }
+
+        .editing .edit {
+            display: block;
+        }
+
+
+    </style>
+</head>
+<body>
+<script>
+    rRequire.bootStrap("app/Todo", null, function (err, TodoApp) {
+        var app = new TodoApp();
+
+        app.init();
+
+        var el = app.render();
+        document.body.appendChild(el);
+    });
+
+
+    var P = function () {
+
+    };
+
+
+
+    P.prototype = {
+        get whatever(){
+
+        },
+
+        get name() {
+
+        },
+
+        set name(val) {
+            this.trigger('change:name', val);
+        }
+    };
+
+
+
+</script>
+
+</body>
+</html>

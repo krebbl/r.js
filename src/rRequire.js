@@ -141,7 +141,7 @@
 
             }
         } else if (node.nodeType == 3) {
-            attributes["text"] = node.nodeValue.replace(/^(\n)+/, "").replace(/(\n)+$/, "");
+            attributes["text"] = node.nodeValue.replace(/\n/g, " ");
         }
 
         return attributes;

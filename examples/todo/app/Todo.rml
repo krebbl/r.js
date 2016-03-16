@@ -1,0 +1,68 @@
+<app:TodoClass xmlns="http://www.w3.org/1999/xhtml" xmlns:r="r" xmlns:app="app" className="whatever">
+    <!-- This file contains all the markup for the Todo App -->
+    <section class="todoapp">
+        <header class="header">
+            <h1>todos</h1>
+            <input class="new-todo" placeholder="What needs to be done?" autofocus="autofocus" onkeyup="handleKeyUp"
+                   value="{newItemTitle}"/>
+        </header>
+        <div visible="{todoStore.loadingTodos}">
+            <p style="text-align: center;">Loading Todos ...</p>
+        </div>
+        <!-- This section should be hidden by default and shown when there are todos -->
+        <section class="main">
+            <input class="toggle-all" visible="{length(todoStore.todos) > 0}" type="checkbox"
+                   checked="{allCompleted(todoStore.todos) ? 'checked' : ''}"
+                   onchange="completeAll" title="asd"/>
+            <label for="toggle-all">Mark all as complete</label>
+            <ul class="todo-list">
+                <!-- These are here just to show the structure of the list items -->
+                <!-- List items should get the class `editing` when editing and `completed` when marked as completed -->
+                <r:Repeat items="{todoStore.todos}" itemKey="todo">
+                    <li class="{todo.completed ? 'completed' : ''} {todo === editingTodo ? 'editing' : ''}">
+                        <!--<app:TodoItem todo="{todo}"/>-->
+                        <div class="view">
+                            <input class="toggle" type="checkbox" checked="{todo.completed ? 'checked' : ''}"
+                                   onclick="check(todo, event)"/>
+                            <label ondblclick="startEditing(todo, event)">{todo.title}</label>
+                            <button class="destroy" onclick="removeTodo(todo)"></button>
+                        </div>
+                        <input class="edit" ref="input" value="{editingTodo.title}" onkeyup="onKeyUp(event)"
+                               onblur="onItemBlur(event)"/>
+                    </li>
+                </r:Repeat>
+            </ul>
+        </section>
+        <!-- This footer should hidden by default and shown when there are todos -->
+        <footer class="footer" visible="{length(todoStore.todos) > 0}" _notCompleted="{notCompleted(todoStore.todos)}">
+            <!-- This should be `0 items left` by default -->
+            <span class="todo-count"><strong>{_notCompleted}</strong> {_notCompleted == 1 ? 'item' : 'items'} left</span>
+            <!-- Remove this if you don't implement routing -->
+
+            <!--<ul class="filters">-->
+            <!--<li>-->
+            <!--<a class="selected" href="#/">All</a>-->
+            <!--</li>-->
+            <!--<li>-->
+            <!--<a href="#/active">Active</a>-->
+            <!--</li>-->
+            <!--<li>-->
+            <!--<a href="#/completed">Completed</a>-->
+            <!--</li>-->
+            <!--</ul>-->
+            <!-- Hidden if no completed items are left ↓ -->
+            <button class="clear-completed" onclick="clearCompleted" visible="{completed(todoStore.todos) > 0}">Clear
+                completed
+            </button>
+        </footer>
+    </section>
+    <footer class="info">
+        <p>Double-click to edit a todo</p>
+        <!-- Remove the below line ↓ -->
+        <p>Template by <a href="http://sindresorhus.com">Sindre Sorhus</a></p>
+        <!-- Change this out with your name and url ↓ -->
+        <p>Created by <a href="http://marcuskrejpowicz.com">Marcus Krejpowicz</a></p>
+
+        <p>Part of <a href="http://todomvc.com">TodoMVC</a></p>
+    </footer>
+</app:TodoClass>

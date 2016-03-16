@@ -1,0 +1,69 @@
+<r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
+    <script>
+        var rAction = require("rAction");
+        var Store = require("app/1024Store");
+        var Actions = require("app/1024Actions");
+
+        var executor = new rAction.Executor();
+        var store = new Store();
+        var GA = new Actions(executor);
+        //
+        executor.addStore(store);
+
+        exports = {
+            defaults: {
+                executor: null,
+                store: null,
+                tiles: "{store.tiles}"
+            },
+
+            postInit: function () {
+                this.callBase();
+                this.mixin(store);
+                GA.initData();
+            },
+
+            _bindDomEvents: function () {
+                this.callBase();
+
+                var self = this;
+                window.onkeyup = function (e) {
+                    self.handleKeyUp(e);
+                };
+            },
+
+            handleKeyUp: function (e) {
+                switch (e.which) {
+                    case 37:
+                        GA.moveLeft();
+                        break;
+                    case 38:
+                        GA.moveUp();
+                        break;
+                    case 39:
+                        GA.moveRight();
+                        break;
+                    case 40:
+                        GA.moveDown();
+                        break;
+                }
+            },
+
+            className: function (tile) {
+
+                var ret = "tile";
+
+                ret += " tile-position-" + tile.position.join("-");
+
+                ret += " tile-points-" + tile.points;
+
+                ret += tile.new ? " tile-new" : "";
+
+                ret += tile.merged ? " tile-merged" : "";
+
+                return ret;
+            }
+        };
+    </script>
+
+</r:DomElement>

@@ -1,4 +1,4 @@
-(function (window, inherit, parser) {
+(function (window, inherit) {
 
     var copy = function (object) {
         var copy = {};
@@ -50,193 +50,216 @@
         return obj;
     };
 
-    var getPathValue = function (scope, path, scopeFinder) {
-
-        if (typeof(path) == "string") {
-            path = parser.parse("{" + path + "}");
-        }
-        path = path.slice();
-        var value,
-            element,
-            fnc;
+    var R_QUOTE = /'|"/;
+    var R_DOT = /\./;
+    var R_RESERVED = /isNaN\(|typeof\(|\s+instanceof\s+|null|true|false|new\s+|\s+Number|\s+Array/;
 
 
-        while (path.length > 0 && scope) {
-            element = path.shift();
-            if (element.type == "var") {
-                scope = scope[element.name];
-            } else if (element.type == "fnc") {
+    var extractParameters = function (expression) {
+        var parameters = [];
 
-                if (element.fnc) {
-                    fnc = element.fnc;
-                } else {
-                    fnc = scope[element.name];
+        expression.replace(/[_a-zA-Z]\w*/g, function (match, pos, full) {
+            if (R_RESERVED.test(match)) {
+                return match;
+            }
+            if (pos > 0) {
+                var before = full.charAt(pos - 1);
+                if (R_QUOTE.test(before) || R_DOT.test(before)) {
+                    return match;
                 }
-                var parameters = [];
-                for (var i = 0; i < element.parameters.length; i++) {
-                    var param = element.parameters[i];
-                    if (param instanceof Array) {
-                        var paramScope = scopeFinder(param);
-                        if (paramScope) {
-                            var v = getPathValue(paramScope, param, scopeFinder);
-                            parameters.push(v);
-                        } else {
-                            throw "Couldnt find scope for " + param[0].name;
+            }
+            var isFunction = false;
+            if (pos + match.length < full.length) {
+                var after = full.charAt(pos + match.length);
+                if (R_QUOTE.test(after)) {
+                    return match;
+                }
+                isFunction = after === "(";
+            }
+
+            if (isFunction) {
+                parameters.push({
+                    key: match,
+                    type: "fnc"
+                });
+                return match;
+            } else {
+                parameters.push({
+                    key: match,
+                    type: "var"
+                });
+                return match;
+            }
+
+        });
+        return parameters;
+    };
+
+
+    var parse = function (expression) {
+
+        var bindingFirst = false;
+        var bindingLast = false;
+        var parameters = [];
+        var res = expression.replace(/\{[^{}]+}/g, function (match, pos, full) {
+            if (pos > 0) {
+                var before = full.charAt(pos - 1);
+            }
+            if (pos < full.length) {
+
+            }
+            parameters = parameters.concat(extractParameters(match.substr(1, match.length - 2)));
+            var inner = "(" + match.substr(1, match.length - 2) + ")";
+
+            if (pos > 0) {
+                inner = "' + " + inner;
+            } else {
+                bindingFirst = true;
+            }
+
+            if (pos + match.length < full.length - 1) {
+                inner += "+ '";
+            } else {
+                bindingLast = true;
+            }
+            return inner;
+        });
+
+        if (!bindingFirst) {
+            res = "'" + res;
+        }
+
+        if (!bindingLast) {
+            res += "'";
+        }
+
+        return {
+            fnc: "return " + res,
+            parameters: parameters
+        };
+    };
+
+    var EventDispatcher = inherit.Base.inherit({
+        ctor: function () {
+            this.callBase();
+
+            this.listeners = {};
+        },
+
+        bind: function (eventName, cb, scope) {
+            var listeners = this.listeners[eventName] = this.listeners[eventName] || [];
+            listeners.push({
+                cb: cb,
+                scope: scope
+            });
+        },
+
+        bindOnce: function (eventName, cb, scope) {
+            // todo: implement
+        },
+
+        unbind: function (eventName, cb, scope) {
+            if (!cb) {
+                this.listeners[eventName] = [];
+            } else {
+                var listeners = this.listeners[eventName];
+                if (listeners) {
+                    for (var i = 0; i < listeners.length; i++) {
+                        var listener = listeners[i];
+                        if (listener.cb === cb && listener.scope === scope) {
+                            listeners.splice(i, 1);
+                            break;
                         }
-                    } else {
-                        parameters.push(param);
                     }
                 }
-                scope = fnc.apply(scope, parameters);
             }
-        }
+        },
 
-        if (path.length == 0) {
-            return scope;
-        }
+        emit: function (eventName, data, scope) {
+            var listeners = this.listeners[eventName];
 
-        return value;
-    };
-
-    var watchProperty = function (o, property, cb) {
-
-        var propertyDescr = Object.getOwnPropertyDescriptor(o, property);
-
-        if (propertyDescr && propertyDescr.set && propertyDescr.set.listeners) {
-            propertyDescr.set.listeners.push(cb);
-        } else {
-            var value = o[property],
-                listeners = [cb];
-
-            var setter = function (v) {
-                var oldValue = value;
-                value = v;
-                for (var i = 0; i < listeners.length; i++) {
-                    var cb = listeners[i];
-                    cb(v, oldValue);
-                }
-            };
-
-            setter.listeners = listeners;
-
-            var ret = Object.defineProperty(o, property, {
-                get: function () {
-                    return value;
-                },
-                set: setter
-            });
-        }
-    };
-
-    var unwatchProperty = function (o, property, cb) {
-        var propertyDescr = Object.getOwnPropertyDescriptor(o, property);
-        if (propertyDescr && propertyDescr.set && propertyDescr.set.listeners) {
-            var listeners = propertyDescr.set.listeners;
-            if (cb) {
+            if (listeners) {
+                var event = {type: eventName, data: data, stopPropagation: false, src: this || scope};
                 for (var i = 0; i < listeners.length; i++) {
                     var listener = listeners[i];
-                    if (listener === cb) {
+                    listener.cb.call(listener.scope || window, event);
+                    if (event.stopPropagation === true) {
                         break;
                     }
                 }
-                if (i < listeners) {
-                    listeners.splice(i, 1);
-                }
-            } else {
-                listeners.splice(0, listeners.length);
             }
         }
-    };
 
+    });
 
     var Binding = inherit.Base.inherit({
-        ctor: function (scope, path, scopeFindFnc, cb) {
-            if (typeof(path) == "string") {
-                path = parser.parse(path);
-            }
+        ctor: function (component, definition, targetKey) {
+            this.targetKey = targetKey;
+            this.component = component;
+            this.defintion = definition;
+
+            var d = parse(definition);
+            this.fncDef = d.fnc;
+
+            this.parameters = [];
+            var parameterArray = [];
+            var scopes = [];
             var self = this;
-            this.path = path;
-            this.cb = cb;
-            this.scopeFindFnc = scopeFindFnc;
-            this.scope = scope;
-            if (!scope) {
-                scope = scopeFindFnc(path);
-                this.scope = scope;
-            }
-            this.currentValue = this.getPathValue(scope, path);
-            this.innerCb = function (n, o) {
-                self._createSubBinding();
-                self._callback(n, o);
+            this.cb = function (e) {
+                component._handleBindingChange(self, e);
             };
-            if (path[0].type == "var") {
-                watchProperty(scope, path[0].name, this.innerCb);
-            } else {
-                var parameters = path[0].parameters;
-                this.parameters = [];
-                for (var i = 0; i < parameters.length; i++) {
-                    var param = parameters[i];
-                    if (param instanceof Array) {
-                        var b = new Binding(null, param, this.scopeFindFnc, function () {
-                            self._callback();
-                        });
-                        this.parameters.push(b);
+            for (var i = 0; i < d.parameters.length; i++) {
+                var parameter = d.parameters[i];
+                if (parameterArray.indexOf(parameter.key) === -1) {
+                    if (parameter.type === "var") {
+                        parameter.scope = component.findScopeForKey(parameter.key, targetKey);
                     } else {
-                        this.parameters.push(param);
+                        parameter.scope = component.findScopeForFnc(parameter.key);
+                    }
+                    parameterArray.push(parameter.key);
+                    this.parameters.push(parameter);
+                    if (scopes.indexOf(parameter.scope) === -1) {
+                        parameter.scope.bind("change", this.cb);
                     }
                 }
             }
 
-            if (path.length > 1) {
-                this._createSubBinding();
-            }
+            this.f = new Function(parameterArray, this.fncDef);
         },
 
-        _createSubBinding: function () {
-            if (this.subBinding) {
-                this.subBinding.destroy();
-            }
-            //if (this.path[0].type == "var") {
-            var pkey = this.path[0].name;
-            if (this.scope && this.scope[pkey] && this.path.length > 1) {
-                var subScope = this.scope[pkey];
-                if (typeof(subScope) == "object" && !(subScope instanceof Array)) {
-                    var self = this;
-                    this.subBinding = new Binding(subScope, this.path.slice(1), this.scopeFindFnc, function () {
-                        self._callback();
-                    });
-                }
-            }
-            //}
-        },
-        destroy: function () {
-            if (this.path[0].type == "var") {
-                unwatchProperty(this.scope, this.path[0].name, this.innerCb);
-            } else {
-                for (var i = 0; i < this.parameters.length; i++) {
-                    var param = this.parameters[i];
-                    if (param instanceof Binding) {
-                        param.destroy();
-                    }
-                }
-            }
-            this.subBinding && this.subBinding.destroy();
-        },
-        _callback: function () {
-            var oldValue = this.currentValue;
-            var newValue = this.getPathValue(this.scope, this.path);
-            //var oldValue = getPathValue(o, this.path.slice(1));
-            this.currentValue = newValue;
-            this.cb(newValue, oldValue);
-        },
-        getPathValue: function (scope, path) {
-            return getPathValue(scope, path, this.scopeFindFnc);
-        },
         getValue: function () {
-            return this.getPathValue(this.scope, this.path);
+            try {
+                return this.f.apply(this.component, this.evaluateParams());
+            } catch (e) {
+                console.warn(e);
+                return null;
+            }
+        },
+
+        evaluateParams: function () {
+            var ret = [];
+            for (var i = 0; i < this.parameters.length; i++) {
+                var p = this.parameters[i];
+                if (p.type === "var") {
+                    ret.push(p.scope.$[p.key]);
+                } else {
+                    ret.push(p.scope[p.key].bind(p.scope))
+                }
+            }
+            return ret;
+        }
+
+
+    });
+
+    var ApplicationContext = inherit.Base.inherit({
+        createInstance: function (factory, attributes, children, parentScope, rootScope, refScope) {
+            return new factory(attributes, children, parentScope, rootScope, refScope, this);
         }
     });
 
-    var Component = inherit.Base.inherit({
+
+    var Component = EventDispatcher.inherit({
         defaultChildren: [],
         defaults: {
             visible: true
@@ -255,15 +278,16 @@
             this._inherit("innerChildren", function (current, base) {
                 return current.concat(base);
             });
+            this.mixins = this.mixins || [];
             this.initialized = false;
-            this.bindings = [];
+            this.bindings = {};
             this.listeners = {};
             this.children = [];
             this.parentScope = parentScope || this;
             this.rootScope = rootScope || this;
             this.refScope = refScope || this;
             this.refs = this.refScope.refs || {};
-            this.context = context || this;
+            this.context = context || new ApplicationContext();
             this.renderedChildren = [];
 
             attributes = attributes || {};
@@ -284,6 +308,18 @@
 
             this.$ = attributes;
             this.outerChildren = children || [];
+
+            for (var i = 0; i < this.mixins.length; i++) {
+                var mixin = this.mixins[i];
+                this.mixin(mixin);
+            }
+        },
+
+        mixin: function (mixin) {
+            mixin.init(this);
+            if (this.mixins.indexOf(mixin) === -1) {
+                this.mixins.push(mixin)
+            }
         },
 
         init: function () {
@@ -298,13 +334,12 @@
                     if (typeof(value) == "string") {
                         var match = value.match(/\{([^\{\}]+)}/);
                         if (match) {
-                            var path = parser.parse(value);
-                            var b = this.createBinding(path, key);
+                            var b = new Binding(this, value, key);
                             if (b) {
                                 value = b.getValue();
                                 this.$[key] = value;
                             }
-                            this.bindings.push(b);
+                            this.bindings[key] = b;
                         }
                     }
                     if (key == "ref") {
@@ -317,6 +352,12 @@
             this._createChildren(this.outerChildren, this, this.rootScope, this.refScope);
 
             this.initialized = true;
+
+            this.postInit();
+        },
+
+        postInit: function () {
+            // abstract
         },
 
         bind: function (eName, cb, scope) {
@@ -329,44 +370,11 @@
             });
         },
 
-        createBinding: function (watchPath, targetKey) {
-            var self = this;
-            return new Binding(null, watchPath, function (path) {
-                var element = path[0];
-                var scope;
-                if (element.type == "var") {
-                    scope = self.findScopeForKey(element.name, targetKey);
-                    return scope ? scope.$ : null;
-                } else if (element.type == "fnc") {
-                    if (element.fnc) {
-                        return self;
-                    }
-                    scope = self.findScopeForFnc(element.name, targetKey);
-                    return scope;
-                }
-                return null;
-            }, function (value) {
-                self.set(targetKey, value);
-            });
-        },
-
-        trigger: function (eName, data) {
-            var listeners = this.listeners[eName];
-            if (listeners) {
-                var args = {
-                    type: eName,
-                    data: data
-                };
-                for (var i = 0; i < listeners.length; i++) {
-                    var listener = listeners[i];
-                    //try {
-                    listener.cb.call(listener.scope, args);
-                    //} catch (e) {
-                    //    console.warn(e);
-                    //}
-
-                }
+        _handleBindingChange: function (b, event) {
+            if (event.src === this && event.data && event.data.changedAttributes && event.data.changedAttributes.hasOwnProperty(b.targetKey)) {
+                return;
             }
+            this.set(b.targetKey, b.getValue());
         },
 
         findScope: function (key, check) {
@@ -396,6 +404,19 @@
             });
         },
 
+        _findFnc: function (key) {
+            var scope = this.findScopeForFnc(key);
+            var f = scope[key];
+            f.bind(scope);
+
+            return f;
+        },
+
+        _findAttr: function (key, targetKey) {
+            var scope = this.findScopeForKey(key, targetKey);
+            return scope.$[key];
+        },
+
         _createChildren: function (children, parentScope, rootScope, refScope) {
             for (var i = 0; i < children.length; i++) {
                 var child = children[i];
@@ -405,7 +426,7 @@
         },
 
         _createInstance: function (factory, attributes, children, parentScope, rootScope, refScope) {
-            return new factory(attributes, children, parentScope, rootScope, refScope, this.context);
+            return this.context.createInstance(factory, attributes, children, parentScope, rootScope, refScope);
         },
 
         _inherit: function (key, inheritFnc) {
@@ -429,13 +450,25 @@
                 return this.el;
             }
 
-            this.el = document.createElementNS("http://www.w3.org/1999/xhtml", this.$.tagName);
+            this.el = window.document.createElementNS("http://www.w3.org/1999/xhtml", this.$.tagName);
 
             this._renderAttributes();
             this._renderChildren();
             this._bindDomEvents();
 
             return this.el;
+        },
+
+        mount: function (el) {
+            this.init();
+            var rendered = this.render();
+            if (el) {
+                el.parentNode.replaceChild(rendered, el);
+            } else {
+                window.document.body.appendChild(rendered);
+            }
+
+            this.emit('mount');
         },
 
         _renderAttributes: function () {
@@ -478,6 +511,7 @@
 
         _removeChild: function (child) {
             this.el.removeChild(child.el);
+            this.renderedChildren.splice(this.renderedChildren.indexOf(child));
         },
 
         _bindDomEvents: function () {
@@ -492,70 +526,60 @@
         },
 
         _bindDomEventToPath: function (event, fncName) {
-            var self = this;
-            var scopeFnc = function (path) {
-                var element = path[0];
-                var scope;
-                if (element.type == "var") {
-                    scope = self.findScopeForKey(element.name, event);
-                    return scope ? scope.$ : null;
-                } else if (element.type == "fnc") {
-                    if (element.fnc) {
-                        return self;
-                    }
-                    scope = self.findScopeForFnc(element.name, event);
-                    return scope;
+            var parameters = extractParameters(fncName);
+            var scope;
+            var parameterArray = [];
+            for (var i = 0; i < parameters.length; i++) {
+                var param = parameters[i];
+                if (param.key === "event") {
+                    continue;
                 }
-                return null;
-            };
-
-            var path = parser.parse("{" + fncName + "}");
-            var scope = scopeFnc(path);
-            if (path.length == 1 || path[0].type == "fnc") {
-                scope = this.findScopeForFnc(path[0].name);
-            } else {
-                scope = this.findScopeForKey(path[0].name);
-                scope = scope.$;
+                scope = this.findScopeForFnc(param.key);
+                if (!scope) {
+                    scope = this.findScopeForKey(param.key);
+                } else {
+                    param.type = "fnc";
+                }
+                if (scope) {
+                    param.scope = scope;
+                }
+                parameterArray.push(param.key);
             }
+            parameterArray.push("event");
+
+            var lastKlammer = fncName.indexOf(")");
+            if (lastKlammer === -1 || lastKlammer < fncName.length - 1) {
+                fncName += "(event)";
+            }
+
+            var fnc = new Function(parameterArray, fncName);
 
             if (scope) {
                 var callback = function (e) {
-                    var fncScope = scope;
-                    if (path.length > 1) {
-                        fncScope = getPathValue(scope, path.slice(0, path.length - 1), scopeFnc);
-                    }
-                    if (fncScope) {
-                        var fncDef = path[path.length - 1];
-                        var fncName = fncDef.name;
-                        if (fncScope[fncName] instanceof Function) {
-                            var fncParams = [];
-                            if (fncDef.type == "fnc") {
-                                var parameters = fncDef.parameters;
-                                for (var i = 0; i < parameters.length; i++) {
-                                    var param = parameters[i];
-                                    if (param instanceof Array) {
-                                        if (param.length == 1 && param[0].name == "event") {
-                                            fncParams.push(e);
-                                        } else {
-                                            var s = scopeFnc(param);
-                                            fncParams.push(getPathValue(s, param, scopeFnc));
-                                        }
-                                    } else {
-                                        fncParams.push(param);
-                                    }
-                                }
+                    var ret = [];
+                    for (var i = 0; i < parameters.length; i++) {
+                        var p = parameters[i];
+                        if (p.key === "event") {
+                            ret.push(e);
+                        } else {
+                            if (p.type === "var") {
+                                ret.push(p.scope.$[p.key]);
                             } else {
-                                fncParams.push(e);
+                                ret.push(p.scope[p.key].bind(p.scope))
                             }
-                            fncScope[fncName].apply(fncScope, fncParams);
                         }
                     }
+                    ret.push(e);
+                    try {
+                        fnc.apply(self, ret);
+                    } catch (e) {
+                        console.warn(e);
+                    }
                 };
-                if (scope) {
-                    this._bindDomEvent(event.substr(2), callback, scope);
-                }
+                this._bindDomEvent(event.substr(2), callback, scope);
+            } else {
+                console.warn("couldnt find callback : " + fncName);
             }
-
         },
 
         getNextRenderedChild: function (child) {
@@ -586,6 +610,9 @@
         },
 
         _renderAttribute: function (key, value) {
+            if (!this.el) {
+                return;
+            }
             if (this.defaults.hasOwnProperty(key) || /^_/.test(key) || key.indexOf("on") == 0 || key == "visible" || key == "ref") {
                 return;
             }
@@ -594,20 +621,26 @@
             if (value == null) {
                 this.el.removeAttribute(key);
             } else {
-                if(key == "style"){
+                if (key == "style") {
                     var elStyle = this.el.style;
                     var styles = value.split(";");
                     for (var i = 0; i < styles.length; i++) {
                         var style = styles[i];
-                        if(style){
+                        if (style) {
                             var styleDef = style.split(":");
                             elStyle[styleDef[0].replace(/(\-\w)/g, function (a) {
                                 return a.replace("-", "").toUpperCase()
-                            }).replace(/^\s+|\s+$/,"")] = styleDef[1];
+                            }).replace(/^\s+|\s+$/, "")] = styleDef[1];
                         }
                     }
                 } else {
-                    this.el[key] = value;
+                    if (/^data/.test(key)) {
+                        this.el.setAttribute(key, value);
+                    } else {
+                        if (this.el[key] !== value) {
+                            this.el[key] = value;
+                        }
+                    }
                     //this.el.setAttribute(key, value);
                 }
             }
@@ -634,29 +667,66 @@
         _bindDomEvent: function (event, handler, scope) {
             var self = this;
             this.el.addEventListener(event, function (e) {
-                handler.call(scope, {domEvent: e, src: self});
+                e.srcView = self;
+                handler.call(scope, e);
             });
 
         },
         set: function (key, value) {
-            this.$[key] = value;
+            if (isObject(key)) {
+                for (var k in key) {
+                    if (key.hasOwnProperty(k)) {
+                        this.$[k] = key[k];
+                    }
+                }
+            } else {
+                this.$[key] = value;
 
-            var ret = {};
-            ret[key] = value;
+                var ret = {};
+                ret[key] = value;
+            }
 
-            this.trigger("change", {changedAttributes: ret});
+            this.emit("change", {changedAttributes: ret});
 
-            this._renderAttribute(key, value);
+            if (isObject(key)) {
+                for (var k in key) {
+                    if (key.hasOwnProperty(k)) {
+                        this._renderAttribute(k, key[k]);
+                    }
+                }
+            } else {
+                this._renderAttribute(key, value);
+            }
             if (key == "visible") {
                 this._renderVisible(value);
             }
+
         },
         destroy: function () {
-            for (var i = 0; i < this.bindings.length; i++) {
-                var binding = this.bindings[i];
-                binding.destroy();
+            for (var key in this.bindings) {
+                if (this.bindings.hasOwnProperty(key)) {
+                    this.bindings[key].destroy();
+                }
             }
         }
+    });
+
+    var Application = Component.inherit({
+
+        ctor: function (attributes, children, parentScope, rootScope, refScope) {
+            var context = {
+                app: this,
+                services: {}
+            };
+
+            this.callBase(attributes, children, parentScope, rootScope, refScope, context);
+            for (var key in this.inject) {
+                if (this.inject.hasOwnProperty(key)) {
+
+                }
+            }
+        }
+
     });
 
     var DomElement = Component.inherit({
@@ -688,60 +758,156 @@
         defaults: {
             itemKey: "item",
             indexKey: "i",
-            keyKey: 'key'
+            keyKey: 'key',
+            idKey: "id"
         },
         ctor: function () {
-            this.callBase();
+            this.itemMap = {};
             this.renderedItems = [];
+
+            this.callBase();
         },
         render: function () {
             this.callBase();
 
             return null;
         },
-        _renderItem: function (item, i, key) {
-            if (i < this.renderedItems.length) {
-                var c = this.renderedItems[i].child;
-                c.set(this.$.itemKey, item);
-                c.set(this.$.indexKey, i);
-                c.set(this.$.keyKey, key || null);
-                this.renderedItems[i].item = item;
-            } else {
-                var child = this.createChildInstanceForItem(item, i, key);
-                //child.defaults[this.$.itemKey] = null;
-                //child.defaults[this.$.indexKey] = null;
 
+        _handleBindingChange: function (binding, event) {
+            if (event.data && event.data.listItemChange) {
+                var listItemChange = event.data.listItemChange;
+                if (binding.targetKey === "items") {
+                    if (binding.getValue() === this.$.items && listItemChange.item) {
+                        var renderedChild = this.itemMap[listItemChange.item[this.$.idKey]];
+                        if (renderedChild) {
+                            renderedChild.view.set(this.$.itemKey, listItemChange.item);
+                            return;
+                        }
+                    }
+                }
+            }
+            this.callBase();
+        },
+
+        _renderItem: function (item, i, key) {
+            var found = false;
+            var remove = [];
+            var renderedItems = this.renderedItems;
+            for (var j = i; j < renderedItems.length; j++) {
+                var renderedItem = renderedItems[j];
+                if (renderedItem.item !== item) {
+                    remove.push(j);
+                } else {
+                    renderedItem.view.set(this.$.itemKey, item);
+                    renderedItem.view.set(this.$.indexKey, i);
+                    found = true;
+                    break;
+                }
+
+            }
+            var parentScope = this.parentScope;
+            if (found && remove.length > 0) {
+                for (var k = 0; k < remove.length; k++) {
+                    var index = remove[k];
+                    parentScope._removeChild(renderedItems[index].view);
+                }
+                renderedItems.splice(remove[0], remove.length);
+            }
+
+            if (!found) {
+                var child = this.createChildInstanceForItem(item, index, key);
                 child.init();
-                if (child.$.visible) {
+                if (i < renderedItems.length - 1) {
+                    var el = child.render();
+                    parentScope.el.insertBefore(el, renderedItems[i].view.el);
+                    var w = parentScope.renderedChildren.indexOf(renderedItems[i].view);
+                    parentScope.renderedChildren.splice(w, 0, child);
+                } else {
                     this._renderChild(child);
-                    this.renderedItems.push({
-                        item: item,
-                        child: child
-                    });
+                }
+
+                var c = {item: item, view: child};
+                renderedItems.splice(i, 0, c);
+                if (item.hasOwnProperty(this.$.idKey)) {
+                    this.itemMap[item[this.$.idKey]] = c;
                 }
             }
         },
+
+        _getRenderedItemByIndex: function (i) {
+            for (var j = 0; j < this.renderedItems.length; j++) {
+                var item = this.renderedItems[j];
+                if (item.index === i) {
+                    return item;
+                }
+            }
+
+            return null;
+
+        },
+
+        _findRenderedChild: function (item) {
+            if (item.hasOwnProperty(this.$.idKey)) {
+                return this.itemMap[item[this.$.idKey]];
+            }
+            return null;
+        },
+
+        _findRenderedItem: function (item) {
+            if (item.hasOwnProperty(this.$.idKey)) {
+                return this.itemMap[item[this.$.idKey]];
+            }
+
+            for (var i = 0; i < this.renderedItems.length; i++) {
+                var renderedItem = this.renderedItems[i];
+                if (renderedItem.item === item) {
+                    return renderedItem;
+                }
+            }
+        },
+
+        _saveRenderedItem: function (item, view, index) {
+            var renderedItem = {
+                item: item,
+                view: view
+            };
+
+            if (item.hasOwnProperty(this.$.idKey)) {
+                this.itemMap[item[this.$.idKey]] = renderedItem;
+            }
+
+            return renderedItem;
+        },
+
         _renderAttribute: function (key, value) {
             if (key == "items") {
+                if (this.renderedItems.length > 0) {
+
+                }
+                var i = 0;
+                var item;
                 var items = this.$.items;
                 if (isArray(items)) {
-                    for (var i = 0; items && i < items.length; i++) {
-                        var item = items[i];
+                    for (; items && i < items.length; i++) {
+                        item = items[i];
                         this._renderItem(item, i);
                     }
                 } else if (isObject(items)) {
-                    var j = 0;
                     for (var ikey in items) {
                         if (items.hasOwnProperty(ikey)) {
-                            this._renderItem(items[ikey], j, ikey);
-                            j++;
+                            this._renderItem(items[ikey], i, ikey);
+                            i++;
                         }
                     }
                 }
 
                 while (this.renderedItems.length > i) {
                     var ri = this.renderedItems.pop();
-                    this._removeChild(ri.child);
+                    item = ri.item;
+                    if (item.hasOwnProperty(this.$.idKey)) {
+                        delete this.itemMap[item[this.$.idKey]];
+                    }
+                    this._removeChild(ri.view);
                 }
             }
         },
@@ -750,13 +916,14 @@
             if (child.render) {
                 var el = child.render();
                 if (el) {
-                    var next = this.parentScope.getNextRenderedChild(this);
+                    var parentScope = this.parentScope;
+                    var next = parentScope.getNextRenderedChild(this);
                     if (next == null) {
-                        this.parentScope.el.appendChild(el);
-                        this.parentScope.renderedChildren.push(child);
+                        parentScope.el.appendChild(el);
+                        parentScope.renderedChildren.push(child);
                     } else {
-                        this.parentScope.el.insertBefore(el, next.getElement());
-                        var i = this.parentScope.renderedChildren.indexOf(next);
+                        parentScope.el.insertBefore(el, next.getElement());
+                        var i = parentScope.renderedChildren.indexOf(next);
                         this.renderedChildren.splice(i - 1, 0, child);
                     }
                 }
@@ -769,7 +936,7 @@
         },
 
         getElement: function () {
-            return this.renderedItems.length > 0 ? this.renderedItems[0].child.el : null;
+            return this.renderedItems.length > 0 ? this.renderedItems[0].view.el : null;
         },
 
         _removeChild: function (child) {
@@ -809,9 +976,7 @@
     r.DomElement = DomElement;
     r.TextElement = TextElement;
     r.Repeat = Repeat;
-    r.watchProperty = watchProperty;
-    r.unwatchProperty = unwatchProperty;
-    r.Binding = Binding;
+    r.EventDispatcher = EventDispatcher;
 
     for (var element in r) {
         if (r.hasOwnProperty(element)) {
@@ -825,7 +990,7 @@
 
 
 })
-(window, inherit, parser);
+(window, inherit);
 
 
 

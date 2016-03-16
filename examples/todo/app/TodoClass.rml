@@ -1,0 +1,126 @@
+<r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
+    <!-- This file contains all the logic for the Todo App-->
+
+    <!-- THE SCRIPT LOGIC for TodoClass -->
+    <script>
+        var rAction = require("rAction");
+        var TodoStore = require("./TodoStore");
+        var TodoActions = require("./TodoActions");
+
+        // init executor
+        var executor = new rAction.Executor();
+        // create TodoStore
+        var todoStore = new TodoStore();
+        // create TodoActions
+        var TA = new TodoActions(executor);
+
+        // add store to executor
+        executor.addStore(todoStore);
+
+        exports = {
+            // mixin todoStore
+            mixins: [todoStore],
+            defaults: {
+                executor: null,
+                todoStore: null,
+                editingTodo: null,
+                newItemTitle: ""
+            },
+            handleKeyUp: function (event) {
+                if (event.which == 13) {
+                    var val = event.target.value.replace(/^\s+|\s+$/, "");
+                    if (val) {
+                        TA.addTodo({title: val});
+                        this.set('newItemTitle', "");
+                    }
+                }
+            },
+
+            postInit: function () {
+                TA.loadTodos();
+            },
+
+            allCompleted: function (items) {
+                if (!items) {
+                    return false;
+                }
+                var completed = this.completed(items);
+                var numItems = this.length(items);
+                return completed === numItems && numItems > 0;
+            },
+
+            completeAll: function (event) {
+                TA.checkAll({completed: event.target.checked});
+            },
+
+            check: function (item, e) {
+                TA.checkTodo({id: item.id, completed: !!e.target.checked});
+            },
+
+            notCompleted: function (todos) {
+                if (!todos) {
+                    return 0;
+                }
+                return _.reduce(todos, function (memo, todo) {
+                    return memo + (todo.completed ? 0 : 1);
+                }, 0);
+            },
+
+            length: function (todos) {
+                return _.keys(todos).length;
+            },
+
+            removeTodo: function (todo) {
+                TA.deleteTodo({id: todo.id});
+            },
+
+            clearCompleted: function () {
+                TA.clearCompleted();
+            },
+
+            startEditing: function (item, event) {
+                this.set('editingTodo', item);
+                event.srcView.refs.input.el.focus();
+            },
+
+            stopEditing: function () {
+                this.set('editingTodo', null);
+            },
+
+            onItemBlur: function (event) {
+                if (this.$.editingTodo) {
+                    var val = event.target.value.replace(/^\s+|\s+$/, "");
+                    if (val) {
+                        TA.updateTitle({id: this.$.editingTodo.id, title: val});
+                    } else {
+                        TA.deleteTodo({id: this.$.editingTodo.id});
+                    }
+                }
+                this.set('editingTodo', null);
+            },
+
+            onKeyUp: function (event) {
+                if (event.which == 13) {
+                    event.target.blur();
+                } else if (event.which == 27) {
+                    this.set('editingTodo', null);
+                }
+            },
+
+            handleUp: function (event) {
+                if (event.which == 27) {
+                    this.set('editingItem', null);
+                }
+            },
+
+            completed: function (todos) {
+                if (!todos) {
+                    return 0;
+                }
+                return _.reduce(todos, function (memo, todo) {
+                    return memo + (todo.completed ? 1 : 0);
+                }, 0);
+            }
+        };
+    </script>
+</r:DomElement>

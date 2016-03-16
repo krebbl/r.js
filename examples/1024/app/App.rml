@@ -1,0 +1,18 @@
+<app:AppClass xmlns='http://www.w3.org/1999/xhtml' xmlns:r="r" xmlns:app="app">
+    <section class="1024app">
+        <header class="header">
+            <h1>1024</h1>
+        </header>
+        <section class="main">
+            <div class="tile-container">
+                <r:Repeat items="{tiles}">
+                    <div class="{className(item)}">
+                        <div class="tile-inner">{item.points}</div>
+                    </div>
+                </r:Repeat>
+            </div>
+        </section>
+    </section>
+    <footer class="info">
+    </footer>
+</app:AppClass>

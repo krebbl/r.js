@@ -1,0 +1,33 @@
+<r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
+    <div class="time">{time}</div>
+    <button onclick="start" disabled="{started}">Start</button>
+    <button onclick="stop" disabled="{!started}">Stop</button>
+    <script type="text/javascript">
+        exports = {
+            // default attributes
+            defaults: {
+                time: 0,
+                started: false
+            },
+            // defaults for the node
+            nodeDefaults: {
+                className: "timer-app"
+            },
+            // event handler
+            start: function () {
+                var self = this;
+
+                this.set("started", true);
+                this.set('time', 0);
+                this.interval = setInterval(function () {
+                    self.set("time", self.$.time + 1);
+                }, 1000);
+            },
+            // event handler
+            stop: function () {
+                clearTimeout(this.interval);
+                this.set("started", false);
+            }
+        };
+    </script>
+</r:DomElement>

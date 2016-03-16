@@ -60,6 +60,10 @@
             return null;
         }
 
+        if (namespace.indexOf("http") === -1) {
+            namespace = "rml!" + namespace;
+        }
+
         namespace = namespace.replace(/\./g, '/');
         var fqClassName = [namespace, localName].join("/");
 
@@ -81,13 +85,20 @@
     function findDependencies(xaml, namespaceMap, xamlClasses, rewriteMap, requestor) {
 
         var ret = [];
+        var requireRegEx = /require\(["']([/\w.]+)["']/gi;
 
         function findDependencies(domNode) {
 
             var localName = localNameFromDomNode(domNode);
 
-            var dep = getDependency(domNode.namespaceURI, localName, namespaceMap, xamlClasses, rewriteMap);
+            if (localName === "script") {
+                return;
+            } else {
+                var dep = getDependency(domNode.namespaceURI, localName, namespaceMap, xamlClasses, rewriteMap);
+            }
+
             // console.log(dep);
+
 
             if (dep && ret.indexOf(dep) == -1 && dep !== requestor) {
                 ret.push(dep);
@@ -102,6 +113,7 @@
             }
 
         }
+
 
         if (xaml) {
             findDependencies(xaml);
@@ -160,11 +172,15 @@
             return factoryMap.r[node.localName];
         }
 
-        return factoryMap[node.namespaceURI.replace(/\./g,"/") + "/" + node.localName];
+        return factoryMap["rml!" + node.namespaceURI.replace(/\./g, "/") + "/" + node.localName];
     };
 
     var nodeToDescription = function (node, factoryMap) {
         if (node.nodeType == 8 || (node.nodeType == 3 && node.nodeValue.replace(/^(\s|\t|\r)+$/, "").length == 0)) {
+            return null;
+        }
+
+        if (node.localName === "script" && node.namespaceURI === "http://www.w3.org/1999/xhtml") {
             return null;
         }
 
@@ -178,6 +194,38 @@
         var children = resolveChildren(node, factoryMap);
 
         return [factory, attributes, children];
+    };
+
+    var nodeToFactory = function (node, factoryMap, scriptObj) {
+        var descriptor = nodeToDescription(node, factoryMap);
+        var xamlFactory;
+        scriptObj = scriptObj || {};
+
+        scriptObj.defaultChildren = descriptor[2];
+        scriptObj.nodeDefaults = descriptor[1];
+
+        xamlFactory = descriptor[0].inherit(scriptObj);
+
+        return xamlFactory;
+    };
+
+    var evaluateScript = function (name, node, parentRequire, callback) {
+
+        var scripts = node.getElementsByTagName("script");
+
+        if (scripts.length) {
+            var f = "define('" + name + "Script',function(require){ var exports; \n %content% }) ";
+            f += "\n//# sourceURL=" + name + ".js";
+
+            var content = scripts[0].text + "\n";
+            content += "return exports;";
+
+            var fnc = new Function("define", f.replace("%content%", content));
+            fnc.call(parentRequire, define);
+            parentRequire([name + "Script"], callback);
+        } else {
+            callback(null);
+        }
     };
 
     fetchTpl = function (url, callback) {
@@ -219,7 +267,7 @@
         }
     };
 
-    define('tpl', [], {
+    define('rml', [], {
 
         write: function (pluginName, name, write) {
 
@@ -233,7 +281,7 @@
 
         load: function (name, parentRequire, load, config) {
 
-            var url = parentRequire.toUrl(name + ".tpl");
+            var url = parentRequire.toUrl(name + ".rml");
 
 
             fetchTpl(url, function (err, xml) {
@@ -288,7 +336,9 @@
                             });
                         });
                     } else {
-                        dependencies.unshift("r");
+                        if (dependencies.indexOf("r") === -1) {
+                            dependencies.unshift("r");
+                        }
                         // first item should be the dependency of the document element
                         parentRequire(dependencies, function () {
                             var factories = Array.prototype.slice.call(arguments, 0);
@@ -299,9 +349,13 @@
                                 factoryMap[dependency] = factories[i];
                             }
 
-                            var description = nodeToDescription(xml.documentElement, factoryMap);
+                            evaluateScript(name, xml.documentElement, parentRequire, function (scriptObj) {
 
-                            load(description[2]);
+                                var classFactory = nodeToFactory(xml.documentElement, factoryMap, scriptObj);
+
+                                load(classFactory);
+                            });
+
                         }, function (err) {
                             load.error(err);
                         });
@@ -313,32 +367,54 @@
         }
     });
 
-    var requirejsContext = require.config({
-        "paths": {
-            "parser": "./r/parser",
-            "inherit": "./r/inherit",
-            "r": "./r/r"
+    var defaultPaths = {
+        "inherit": "./r/inherit"
+    };
+
+    var defaultShim = {
+        "inherit": {
+            "exports": "inherit"
         },
-        "shim": {
-            "underscore": {
-                "exports": "_"
-            },
-            "inherit": {
-                "exports": "inherit"
-            },
-            "parser": {
-                "exports": "parser"
-            },
-            "r": {
-                "exports": "r"
-            }
+        "r/r": {
+            "exports": "r"
         }
-    });
+    };
 
 
     var bootStrap = function (mainClass, config, callback) {
 
-        requirejsContext(["inherit", "parser", "r"], function (inherit, parser, r) {
+        config = config || {paths: {}, shim: {}};
+
+        config.paths = config.paths || {};
+        config.shim = config.shim || {};
+
+        for (var k in defaultPaths) {
+            if (defaultPaths.hasOwnProperty(k)) {
+                if (!config.paths[k]) {
+                    config.paths[k] = defaultPaths[k];
+                }
+            }
+        }
+
+        for (var s in defaultShim) {
+            if (defaultShim.hasOwnProperty(s)) {
+                if (!config.shim[s]) {
+                    config.shim[s] = defaultShim[s];
+                }
+            }
+        }
+
+        var requirejsContext = require.config(config);
+
+        //require.onResourceLoad = function(context, map, deps){
+        //    console.log("onload");
+        //};
+
+        requirejsContext(["inherit", "r/r"], function (inherit, r) {
+
+            define("r", function(){
+                return r;
+            });
 
             requirejsContext([mainClass], function (mainClassFactory) {
 

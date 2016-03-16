@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title></title>
+    <script src="./r/inherit.js" type="text/javascript" id="inheritScript"></script>
+    <script src="./r/r.js" type="text/javascript"></script>
+    <script src="./r/rCompiler.js" type="text/javascript"></script>
+</head>
+<body>
+
+<div id="timerApp"/>
+
+<script type="text/rml" src="./Timer.rml"></script>
+<script type="text/javascript">
+    var Timer = rCompiler.compile("Timer");
+
+    var timer = new Timer({time: 2});
+
+    // mount the timer instance
+    timer.mount(document.getElementById("timerApp"));
+</script>
+</body>
+</html>

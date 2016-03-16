@@ -77,19 +77,11 @@
                 isFunction = after === "(";
             }
 
-            if (isFunction) {
-                parameters.push({
-                    key: match,
-                    type: "fnc"
-                });
-                return match;
-            } else {
-                parameters.push({
-                    key: match,
-                    type: "var"
-                });
-                return match;
-            }
+            parameters.push({
+                key: match,
+                type: isFunction ? "fnc" : "var"
+            });
+            return match;
 
         });
         return parameters;

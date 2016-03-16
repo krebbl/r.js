@@ -39,7 +39,7 @@ define(["r", "rAction", "underscore"], function (r, rAction, _) {
                 var t = this.tiles[i];
                 if (!t.remove) {
                     //tiles.push(t);
-                    if (t.moved) {
+                    if (t.moved || t.merged) {
                         moved = true;
                     }
                     positionsTaken.push(t.position[X_AXIS] + t.position[Y_AXIS] * 4);

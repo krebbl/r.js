@@ -55,7 +55,7 @@
 
                 ret += " tile-position-" + tile.position.join("-");
 
-                ret += " tile-points-" + tile.points;
+                ret += " tile-" + tile.points;
 
                 ret += tile.new ? " tile-new" : "";
 

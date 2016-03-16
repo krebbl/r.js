@@ -53,7 +53,7 @@
     var R_QUOTE = /'|"/;
     var R_DOT = /\./;
     var R_RESERVED = /isNaN\(|typeof\(|\s+instanceof\s+|null|true|false|new\s+|\s+Number|\s+Array/;
-
+    var R_BINDING_ESCAPE = /\\/;
 
     var extractParameters = function (expression) {
         var parameters = [];
@@ -93,12 +93,18 @@
         var bindingFirst = false;
         var bindingLast = false;
         var parameters = [];
-        var res = expression.replace(/\{[^{}]+}/g, function (match, pos, full) {
+        var res = expression.replace(/\{[^{]+}/g, function (match, pos, full) {
             if (pos > 0) {
                 var before = full.charAt(pos - 1);
+                if(R_BINDING_ESCAPE.test(before)){
+                    return match;
+                }
             }
-            if (pos < full.length) {
-
+            if (pos + match.length < full.length) {
+                var after = full.charAt(pos+match.length - 1);
+                if(R_BINDING_ESCAPE.test(after)){
+                    return match;
+                }
             }
             parameters = parameters.concat(extractParameters(match.substr(1, match.length - 2)));
             var inner = "(" + match.substr(1, match.length - 2) + ")";
@@ -116,6 +122,9 @@
             }
             return inner;
         });
+
+        res = res.replace(/\{/, "{");
+        res = res.replace(/\}/, "}");
 
         if (!bindingFirst) {
             res = "'" + res;
@@ -324,7 +333,7 @@
                 if (this.$.hasOwnProperty(key)) {
                     value = this.$[key];
                     if (typeof(value) == "string") {
-                        var match = value.match(/\{([^\{\}]+)}/);
+                        var match = value.match(/\{/);
                         if (match) {
                             var b = new Binding(this, value, key);
                             if (b) {

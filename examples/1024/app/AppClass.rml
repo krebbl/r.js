@@ -1,8 +1,8 @@
 <r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
     <script>
         var rAction = require("rAction");
-        var Store = require("app/1024Store");
-        var Actions = require("app/1024Actions");
+        var Store = require("./1024Store");
+        var Actions = require("./1024Actions");
 
         var executor = new rAction.Executor();
         var store = new Store();

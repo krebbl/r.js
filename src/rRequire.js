@@ -56,7 +56,7 @@
             console.warn("It seems that you forgot to add a namespace. Try using xmlns='http://www.w3.org/1999/xhtml' in your xaml");
         }
 
-        if (namespace == "http://www.w3.org/1999/xhtml" || namespace == "r") {
+        if (namespace.indexOf("http://www.w3.org") === 0 || namespace == "r") {
             return null;
         }
 
@@ -85,7 +85,6 @@
     function findDependencies(xaml, namespaceMap, xamlClasses, rewriteMap, requestor) {
 
         var ret = [];
-        var requireRegEx = /require\(["']([/\w.]+)["']/gi;
 
         function findDependencies(domNode) {
 
@@ -123,18 +122,21 @@
     }
 
     var attributeMap = {
-        "class": "className",
-        "for": "htmlFor"
+        //"class": "className",
+        //"for": "htmlFor"
     };
 
     var resolveAttributes = function (node) {
         var attributes = {};
 
-        if (node.namespaceURI == "http://www.w3.org/1999/xhtml") {
-            attributes["tagName"] = node.tagName;
-        }
+
 
         if (node.nodeType == 1) {
+            if (node.namespaceURI && node.namespaceURI.indexOf("http://www.w3.org/") === 0) {
+                attributes["tagName"] = node.tagName;
+                attributes["xmlns"] = node.namespaceURI;
+            }
+
             for (var i = 0; i < node.attributes.length; i++) {
                 var attribute = node.attributes[i];
                 attributes[attributeMap[attribute.localName] || attribute.localName] = attribute.nodeValue;
@@ -164,7 +166,7 @@
         if (node.nodeType == 3) {
             return factoryMap.r.TextElement;
         }
-        if (node.namespaceURI == "http://www.w3.org/1999/xhtml" && node.nodeType == 1) {
+        if (node.namespaceURI.indexOf("http://www.w3.org") === 0 && node.nodeType == 1) {
             return factoryMap.r.DomElement;
         }
         if (node.namespaceURI == "r") {
@@ -412,7 +414,7 @@
 
         requirejsContext(["inherit", "r/r"], function (inherit, r) {
 
-            define("r", function(){
+            define("r", function () {
                 return r;
             });
 

@@ -50,6 +50,7 @@
         return obj;
     };
 
+    var R_VARNAME = /[_a-zA-Z]\w*/g;
     var R_QUOTE = /'|"/;
     var R_DOT = /\./;
     var R_RESERVED = /isNaN\(|typeof\(|\s+instanceof\s+|null|true|false|new\s+|\s+Number|\s+Array/;
@@ -58,7 +59,7 @@
     var extractParameters = function (expression) {
         var parameters = [];
 
-        expression.replace(/[_a-zA-Z]\w*/g, function (match, pos, full) {
+        expression.replace(R_VARNAME, function (match, pos, full) {
             if (R_RESERVED.test(match)) {
                 return match;
             }
@@ -96,13 +97,13 @@
         var res = expression.replace(/\{[^{]+}/g, function (match, pos, full) {
             if (pos > 0) {
                 var before = full.charAt(pos - 1);
-                if(R_BINDING_ESCAPE.test(before)){
+                if (R_BINDING_ESCAPE.test(before)) {
                     return match;
                 }
             }
             if (pos + match.length < full.length) {
-                var after = full.charAt(pos+match.length - 1);
-                if(R_BINDING_ESCAPE.test(after)){
+                var after = full.charAt(pos + match.length - 1);
+                if (R_BINDING_ESCAPE.test(after)) {
                     return match;
                 }
             }
@@ -165,7 +166,7 @@
             } else {
                 var listeners = this.listeners[eventName];
                 if (listeners) {
-                    for (var i = 0; i < listeners.length; i++) {
+                    for (var i = listeners.length - 1; i >= 0; i--) {
                         var listener = listeners[i];
                         if (listener.cb === cb && listener.scope === scope) {
                             listeners.splice(i, 1);
@@ -197,24 +198,42 @@
         ctor: function (component, definition, targetKey) {
             this.targetKey = targetKey;
             this.component = component;
-            this.defintion = definition;
-
+            this.definition = definition;
+            this.hasFunction = false;
             var d = parse(definition);
             this.fncDef = d.fnc;
 
             this.parameters = [];
+            this.parameterKeys = {};
             var parameterArray = [];
             var scopes = [];
             var self = this;
             this.cb = function (e) {
-                component._handleBindingChange(self, e);
+                var changed = true;
+                if (!self.hasFunction && e.data && e.data.changedAttributes) {
+                    changed = false;
+                    var changedAttributes = e.data.changedAttributes;
+                    for (var k in changedAttributes) {
+                        if (changedAttributes.hasOwnProperty(k) && self.parameterKeys.hasOwnProperty(k)) {
+                            changed = true;
+                            break;
+                        }
+                    }
+                }
+                // only react on attributes in the changedAttributes set
+                //
+                if (changed) {
+                    component._handleBindingChange(self, e);
+                }
             };
             for (var i = 0; i < d.parameters.length; i++) {
                 var parameter = d.parameters[i];
                 if (parameterArray.indexOf(parameter.key) === -1) {
                     if (parameter.type === "var") {
                         parameter.scope = component.findScopeForKey(parameter.key, targetKey);
+                        this.parameterKeys[parameter.key] = parameter;
                     } else {
+                        this.hasFunction = true;
                         parameter.scope = component.findScopeForFnc(parameter.key);
                     }
                     parameterArray.push(parameter.key);
@@ -248,6 +267,12 @@
                 }
             }
             return ret;
+        },
+        destroy: function () {
+            for (var i = 0; i < this.parameters.length; i++) {
+                var p = this.parameters[i];
+                p.scope.unbind("change", this.cb);
+            }
         }
 
 
@@ -259,10 +284,13 @@
         }
     });
 
+    var NS_XHTML = "http://www.w3.org/1999/xhtml";
 
     var Component = EventDispatcher.inherit({
         defaultChildren: [],
         defaults: {
+            tagName: "div",
+            xmlns: NS_XHTML,
             visible: true
         },
         ctor: function (attributes, children, parentScope, rootScope, refScope, context) {
@@ -306,7 +334,8 @@
                     }
                 }
             }
-
+            this.tagName = attributes.tagName;
+            this.xmlns = attributes.xmlns;
             this.$ = attributes;
             this.outerChildren = children || [];
 
@@ -451,7 +480,7 @@
                 return this.el;
             }
 
-            this.el = window.document.createElementNS("http://www.w3.org/1999/xhtml", this.$.tagName);
+            this.el = window.document.createElementNS(this.xmlns || NS_XHTML, this.tagName);
 
             this._renderAttributes();
             this._renderChildren();
@@ -611,7 +640,8 @@
         },
 
         _renderAttribute: function (key, value) {
-            if (!this.el) {
+            var el = this.el;
+            if (!el) {
                 return;
             }
             if (this.defaults.hasOwnProperty(key) || /^_/.test(key) || key.indexOf("on") == 0 || key == "visible" || key == "ref") {
@@ -620,10 +650,10 @@
 
 
             if (value == null) {
-                this.el.removeAttribute(key);
+                el.removeAttribute(key);
             } else {
                 if (key == "style") {
-                    var elStyle = this.el.style;
+                    var elStyle = el.style;
                     var styles = value.split(";");
                     for (var i = 0; i < styles.length; i++) {
                         var style = styles[i];
@@ -636,10 +666,24 @@
                     }
                 } else {
                     if (/^data/.test(key)) {
-                        this.el.setAttribute(key, value);
+                        el.setAttribute(key, value);
                     } else {
-                        if (this.el[key] !== value) {
-                            this.el[key] = value;
+                        if (this.tagName === "input" && key === "checked") {
+                            el.checked = !!value ? "checked" : false;
+                        } else if (this.tagName === "input" && key === "value") {
+                            el.value = value;
+                        } else {
+                            if (value == false) {
+                                // first set empty -> needed for Chrome
+                                el.setAttribute(key, "");
+                                // then remove -> needed for firefox
+                                el.removeAttribute(key);
+                            } else {
+                                var v = value + "";
+                                if (el.getAttribute(key) !== v) {
+                                    el.setAttribute(key, v);
+                                }
+                            }
                         }
                     }
                     //this.el.setAttribute(key, value);
@@ -674,7 +718,9 @@
 
         },
         set: function (key, value) {
+            var ret;
             if (isObject(key)) {
+                ret = key;
                 for (var k in key) {
                     if (key.hasOwnProperty(k)) {
                         this.$[k] = key[k];
@@ -683,26 +729,29 @@
             } else {
                 this.$[key] = value;
 
-                var ret = {};
+                ret = {};
                 ret[key] = value;
             }
 
-            this.emit("change", {changedAttributes: ret});
+            this.update(ret);
+        },
 
-            if (isObject(key)) {
-                for (var k in key) {
-                    if (key.hasOwnProperty(k)) {
-                        this._renderAttribute(k, key[k]);
+        update: function (attributes) {
+            attributes = attributes || this.$;
+            this.emit("change", {changedAttributes: attributes});
+
+            for (var k in attributes) {
+                if (attributes.hasOwnProperty(k)) {
+                    if (k === "visible") {
+                        this._renderVisible(attributes[k]);
+                    } else {
+                        this._renderAttribute(k, attributes[k]);
                     }
                 }
-            } else {
-                this._renderAttribute(key, value);
-            }
-            if (key == "visible") {
-                this._renderVisible(value);
             }
 
         },
+
         destroy: function () {
             for (var key in this.bindings) {
                 if (this.bindings.hasOwnProperty(key)) {
@@ -791,16 +840,19 @@
         },
 
         _renderItem: function (item, i, key) {
-            var found = false;
-            var remove = [];
-            var renderedItems = this.renderedItems;
+            var found = false,
+                remove = [],
+                renderedItems = this.renderedItems;
+
             for (var j = i; j < renderedItems.length; j++) {
                 var renderedItem = renderedItems[j];
                 if (renderedItem.item !== item) {
                     remove.push(j);
                 } else {
-                    renderedItem.view.set(this.$.itemKey, item);
-                    renderedItem.view.set(this.$.indexKey, i);
+                    var s = {};
+                    s[this.$.itemKey] = item;
+                    s[this.$.indexKey] = i;
+                    renderedItem.view.set(s);
                     found = true;
                     break;
                 }
@@ -882,12 +934,10 @@
 
         _renderAttribute: function (key, value) {
             if (key == "items") {
-                if (this.renderedItems.length > 0) {
+                var i = 0,
+                    item,
+                    items = this.$.items;
 
-                }
-                var i = 0;
-                var item;
-                var items = this.$.items;
                 if (isArray(items)) {
                     for (; items && i < items.length; i++) {
                         item = items[i];
@@ -909,6 +959,7 @@
                         delete this.itemMap[item[this.$.idKey]];
                     }
                     this._removeChild(ri.view);
+                    ri.view.destroy();
                 }
             }
         },
@@ -955,8 +1006,8 @@
             attributes[this.$.keyKey] = key;
 
             var tpl = this.findTemplate();
-
-            return this._createInstance(tpl[0], extend(attributes, tpl[1]), tpl[2], this.parentScope, this.rootScope, null);
+            this.itemFactory = this.itemFactory || tpl[0].inherit({defaults: attributes});
+            return this._createInstance(this.itemFactory, extend(attributes, tpl[1]), tpl[2], this.parentScope, this.rootScope, null);
         },
 
         findTemplate: function () {

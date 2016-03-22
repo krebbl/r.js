@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 {snakeStore.size} {snakeStore.size}" width="300" height="300">
+
+    <rect each="{snakeStore.snake}" width="1" height="1" fill="red" x="{item.x}" y="{item.y}"/>
+
+    <rect each="{snakeStore.points}" width="1" height="1" fill="black" x="{item.x}" y="{item.y}"/>
+
+    <script type="text/javascript">
+        var rAction = require("rAction");
+        var SnakeStore = require("./SnakeStore");
+        var SnakeActions = require("./SnakeActions");
+
+        // init executor
+        var executor = new rAction.Executor();
+        // create SnakeStore
+        var snakeStore = new SnakeStore();
+        // create SnakeActions
+        var SA = new SnakeActions(executor);
+
+        // add store to executor
+        executor.addStore(snakeStore);
+
+
+        exports = {
+            mixins: [snakeStore],
+            defaults: {
+                snakeStore: null
+            },
+            postInit: function () {
+                this.callBase();
+                var self = this;
+                window.onkeyup = function (e) {
+                    self.handleKeyUp(e);
+                };
+
+                SA.start();
+            },
+            handleKeyUp: function (e) {
+                switch (e.which) {
+                    case 37:
+                        SA.changeDirection({direction: [-1, 0]});
+                        break;
+                    case 38:
+                        SA.changeDirection({direction: [0, -1]});
+                        break;
+                    case 39:
+                        SA.changeDirection({direction: [1, 0]});
+                        break;
+                    case 40:
+                        SA.changeDirection({direction: [0, 1]});
+                        break;
+                }
+            }
+        }
+    </script>
+</svg>

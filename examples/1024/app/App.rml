@@ -5,11 +5,9 @@
         </header>
         <section class="main">
             <div class="tile-container">
-                <r:Repeat items="{tiles}">
-                    <div class="{className(item)}">
-                        <div class="tile-inner">{item.points}</div>
-                    </div>
-                </r:Repeat>
+                <div each="{tiles}" class="{className(item)}">
+                    <div class="tile-inner">{item.points}</div>
+                </div>
             </div>
         </section>
     </section>

@@ -2,15 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title></title>
-    <link href="./css/base.css" rel="stylesheet"/>
-    <script src="./../libs/require.js" type="text/javascript"></script>
+    <title>r.Examples - Snake</title>
+    <script src="../libs/require.js" type="text/javascript"></script>
     <script src="./r/rRequire.js" type="text/javascript"></script>
+
 </head>
 <body>
-<div id="app"/>
-<script>
-    rRequire.bootStrap("rml!app/App", {
+<script type="text/javascript">
+
+    rRequire.bootStrap("rml!app/Snake", {
         "paths": {
             "rAction": "./r/rAction",
             "underscore": "../libs/underscore"
@@ -23,10 +23,10 @@
                 "exports": "rAction"
             }
         }
-    }, function (err, TodoApp) {
-        var app = new TodoApp();
+    }, function (err, SnakeApp) {
+        var app = new SnakeApp();
 
-        app.mount(document.getElementById("app"));
+        app.mount();
     });
 
 </script>

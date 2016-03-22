@@ -1,4 +1,4 @@
-<r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
+<div xmlns="http://www.w3.org/1999/xhtml">
     <!-- This file contains all the logic for the Todo App-->
 
     <!-- THE SCRIPT LOGIC for TodoClass -->
@@ -123,4 +123,4 @@
             }
         };
     </script>
-</r:DomElement>
+</div>

@@ -1,0 +1,55 @@
+<div xmlns="http://www.w3.org/1999/xhtml">
+    <form onsubmit="submit">
+        <div>
+            <label for="data.text">Input Element</label>
+            <input id="data.text" type="text" value="{data.text}"/>
+        </div>
+
+        <div>
+            <label for="data.checked">Input Checkbox</label>
+            <input id="data.checked" type="checkbox" checked="{data.checked}"/>
+        </div>
+
+        <div>
+            <label for="data.select">Select box</label>
+            <select id="data.select" value="{data.selected}">
+                <option value="">Select one option ...</option>
+                <option each="{selectOptions}" value="{item.value}">Option {item.value}</option>
+            </select>
+        </div>
+
+        <input type="submit" value="Send"/>
+        <input type="reset" value="Clear"/>
+        <button onclick="reset">Reset</button>
+    </form>
+
+    <script type="text/javascript">
+
+        exports = {
+            defaults: {
+                data: {
+                    text: "Hallo",
+                    checked: true,
+                    selected: "3"
+                },
+                selectOptions: [
+                    {value: "1"},
+                    {value: "2"},
+                    {value: "3"}
+                ]
+            },
+            reset: function(e){
+                e.preventDefault();
+                this.set('data', this.$.data);
+            },
+            submit: function(e){
+                e.preventDefault();
+                console.log(e.target.elements);
+                return false;
+
+            }
+        };
+
+    </script>
+
+</div>

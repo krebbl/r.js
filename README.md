@@ -7,10 +7,14 @@ r.js is a React-like component-based frontend library based on web standards.
 Yeah I know there are a lot of frontend frameworks and libraries out there but
 I wanted to create one with the following key criterias.
 
+
+* Usage of web standards like HTML, XHTML and Javascript
 * Support (Highlighting and Autocompletion) for most IDEs
+* Custom tags (components)
+* Extendable tags (Inheritance, Mixins)
 * Small footprint (size)
-* Extendable components. (Inheritance, Mixins)
-* No event listeners on the data models.
+* No event listeners on the data models
+* Virtual DOM
 
 ## How do you define a component?
 
@@ -61,7 +65,7 @@ In this case we inherit from the core class DomElement.
 
 The script tag contains all the logic of a component like event handlers and defaults.
 To tell the component that it's state has changed we call the set method.
-After this only the changes are rendered to the DOM.
+After this all changes are rendered to the DOM.
 
 
 

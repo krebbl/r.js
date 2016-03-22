@@ -4,6 +4,38 @@
         "for": "htmlFor"
     };
 
+    var fs, createXhr,
+        progIds = ['Msxml2.XMLHTTP', 'Microsoft.XMLHTTP', 'Msxml2.XMLHTTP.4.0'];
+
+    // Browser action
+    createXhr = function () {
+        //Would love to dump the ActiveX crap in here. Need IE 6 to die first.
+        var xhr, i, progId;
+        if (typeof XMLHttpRequest !== "undefined") {
+            return new XMLHttpRequest();
+        } else {
+            for (i = 0; i < 3; i++) {
+                progId = progIds[i];
+                try {
+                    xhr = new ActiveXObject(progId);
+                } catch (e) {
+                    // nothing to do here
+                }
+
+                if (xhr) {
+                    progIds = [progId];  // so faster next time
+                    break;
+                }
+            }
+        }
+
+        if (!xhr) {
+            throw new Error("getXhr(): XMLHttpRequest not available");
+        }
+
+        return xhr;
+    };
+
     var factoryMap = {
         r: r
     };
@@ -73,11 +105,100 @@
         return [factory, attributes, children];
     };
 
-    var tplToChildren = function (id) {
+    var nodeToFactory = function (node, factoryMap, scriptObj) {
+        var descriptor = nodeToDescription(node, factoryMap);
+        var xamlFactory;
+        scriptObj = scriptObj || {};
 
+        scriptObj.defaultChildren = descriptor[2];
+        scriptObj.nodeDefaults = descriptor[1];
+
+        xamlFactory = descriptor[0].inherit(scriptObj);
+
+        return xamlFactory;
+    };
+
+    var evaluateScript = function (name, node, parentRequire, callback) {
+
+        var scripts = node.getElementsByTagName("script");
+
+        if (scripts.length) {
+            var f = "define('" + name + "Script',function(require){ var exports; \n %content% }) ";
+            f += "\n//# sourceURL=" + name + ".js";
+
+            var content = scripts[0].text + "\n";
+            content += "return exports;";
+
+            var fnc = new Function("define", f.replace("%content%", content));
+            fnc.call(parentRequire, define);
+            parentRequire([name + "Script"], callback);
+        } else {
+            callback(null);
+        }
+    };
+
+    var loadScript = function (node, callback) {
+        var xhr;
+        var url = node.src;
+        try {
+            xhr = createXhr();
+            xhr.open('GET', url, false);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200 || xhr.status === 304) {
+                        if (xhr.responseText) {
+                            var parser = new DOMParser();
+                            var xmlDoc = parser.parseFromString(xhr.responseText.replace(/&/g, "&amp;"), "text/xml");
+                            callback(null, xmlDoc);
+                        } else {
+                            callback("no responseXML found");
+                        }
+                    } else {
+                        callback("got status " + xhr.status + " for " + url);
+                    }
+                }
+            };
+            xhr.send(null);
+        } catch (e) {
+            callback(e);
+        }
+    };
+
+    var define = function (name, fnc) {
+        factoryMap[name] = fnc(require);
+    };
+
+    var require = function (module, callback) {
+        var ret = factoryMap[module] || window[module];
+
+        if (!ret) {
+            throw new Error("Couldn't require " + module);
+        }
+
+        callback(ret);
     };
 
     window.rCompiler = {
+        compile: function () {
+            var scripts = window.document.getElementsByTagName("script");
+            for (var i = 0; i < scripts.length; i++) {
+                var script = scripts[i];
+                if (script.type === "text/rml") {
+                    var name = script.src;
+                    loadScript(script, function (err, node) {
+                        if (!err) {
+                            var so = evaluateScript(name, node, require, function (scriptObj) {
+                                var f = nodeToFactory(node, factoryMap, scriptObj);
+                                factoryMap[name] = f;
+                            });
+                        }
+                    });
+                }
+            }
+
+            return factoryMap;
+
+        },
         createClass: function (BaseClass, logic, tpl) {
             logic.defaultChildren = this.txtToChildren(tpl);
 

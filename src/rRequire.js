@@ -167,7 +167,7 @@
             return factoryMap.r.TextElement;
         }
         if (node.namespaceURI.indexOf("http://www.w3.org") === 0 && node.nodeType == 1) {
-            return factoryMap.r.DomElement;
+            return factoryMap.r.Component;
         }
         if (node.namespaceURI == "r") {
             //var dependency = getDependency(node.namespaceURI, localNameFromDomNode(node));
@@ -182,7 +182,7 @@
             return null;
         }
 
-        if (node.localName === "script" && node.namespaceURI === "http://www.w3.org/1999/xhtml") {
+        if (node.localName === "script" && node.namespaceURI.indexOf("http://www.w3.org") > -1) {
             return null;
         }
 
@@ -219,7 +219,7 @@
             var f = "define('" + name + "Script',function(require){ var exports; \n %content% }) ";
             f += "\n//# sourceURL=" + name + ".js";
 
-            var content = scripts[0].text + "\n";
+            var content = scripts[0].textContent + "\n";
             content += "return exports;";
 
             var fnc = new Function("define", f.replace("%content%", content));
@@ -251,6 +251,7 @@
                     if (xhr.readyState === 4) {
                         if (xhr.status === 200 || xhr.status === 304) {
                             if (xhr.responseText) {
+                                var text = xhr.responseText.replace(/(<script[^>]+>)/, "$1\n  //<![CDATA[").replace(/(<\/script>)/,"//]]>\n$1");
                                 var parser = new DOMParser();
                                 var xmlDoc = parser.parseFromString(xhr.responseText.replace(/&/g, "&amp;"), "text/xml");
                                 callback(null, xmlDoc);

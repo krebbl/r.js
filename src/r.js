@@ -12,7 +12,7 @@
     };
 
     var isArray = Array.isArray || function (obj) {
-            return String.prototype.toString.call(obj) == '[object Array]';
+            return String.prototype.toString.call(obj) === '[object Array]';
         };
 
     var clone = function (obj) {
@@ -70,8 +70,9 @@
                 }
             }
             var isFunction = false;
-            if (pos + match.length < full.length) {
-                var after = full.charAt(pos + match.length);
+            var matchLength = pos + match.length;
+            if (matchLength < full.length) {
+                var after = full.charAt(matchLength);
                 if (R_QUOTE.test(after)) {
                     return match;
                 }
@@ -101,8 +102,9 @@
                     return match;
                 }
             }
-            if (pos + match.length < full.length) {
-                var after = full.charAt(pos + match.length - 1);
+            var matchLength = pos + match.length;
+            if (matchLength < full.length) {
+                var after = full.charAt(matchLength - 1);
                 if (R_BINDING_ESCAPE.test(after)) {
                     return match;
                 }
@@ -116,7 +118,7 @@
                 bindingFirst = true;
             }
 
-            if (pos + match.length < full.length - 1) {
+            if (matchLength < full.length - 1) {
                 inner += "+ '";
             } else {
                 bindingLast = true;
@@ -124,8 +126,7 @@
             return inner;
         });
 
-        res = res.replace(/\{/, "{");
-        res = res.replace(/\}/, "}");
+        res = res.replace(/\{/, "{").replace(/\}/, "}");
 
         if (!bindingFirst) {
             res = "'" + res;
@@ -149,6 +150,10 @@
         },
 
         bind: function (eventName, cb, scope) {
+            this.on(eventName, cb, scope);
+        },
+
+        on: function (eventName, cb, scope) {
             var listeners = this.listeners[eventName] = this.listeners[eventName] || [];
             listeners.push({
                 cb: cb,
@@ -238,8 +243,12 @@
                     }
                     parameterArray.push(parameter.key);
                     this.parameters.push(parameter);
-                    if (scopes.indexOf(parameter.scope) === -1) {
-                        parameter.scope.bind("change", this.cb);
+                    if (parameter.scope) {
+                        if (scopes.indexOf(parameter.scope) === -1) {
+                            parameter.scope.on("change", this.cb);
+                        }
+                    } else {
+                        console.warn("couldnt find scope for " + parameter.key);
                     }
                 }
             }
@@ -323,6 +332,7 @@
 
             var defaults = extend({}, this.defaults, this.nodeDefaults);
 
+            //attributes = clone(attributes);
             for (var key in defaults) {
                 if (defaults.hasOwnProperty(key)) {
                     if (!attributes.hasOwnProperty(key)) {
@@ -336,6 +346,7 @@
             }
             this.tagName = attributes.tagName;
             this.xmlns = attributes.xmlns;
+
             this.$ = attributes;
             this.outerChildren = children || [];
 
@@ -358,22 +369,33 @@
             }
 
             var value;
-            for (var key in this.$) {
-                if (this.$.hasOwnProperty(key)) {
-                    value = this.$[key];
-                    if (typeof(value) == "string") {
-                        var match = value.match(/\{/);
-                        if (match) {
-                            var b = new Binding(this, value, key);
-                            if (b) {
-                                value = b.getValue();
-                                this.$[key] = value;
-                            }
-                            this.bindings[key] = b;
-                        }
+            if (this.$.hasOwnProperty("each")) {
+                if (typeof(this.$.each) === "string") {
+                    var eachBinding = new Binding(this, this.$.each, "each");
+                    if (eachBinding) {
+                        value = eachBinding.getValue();
+                        this.$.each = value;
                     }
-                    if (key == "ref") {
-                        this.refScope.refs[value] = this;
+                    this.bindings["each"] = b;
+                }
+            } else {
+                for (var key in this.$) {
+                    if (this.$.hasOwnProperty(key)) {
+                        value = this.$[key];
+                        if (typeof(value) === "string") {
+                            var match = value.match(/\{/);
+                            if (match) {
+                                var b = new Binding(this, value, key);
+                                if (b) {
+                                    value = b.getValue();
+                                    this.$[key] = value;
+                                }
+                                this.bindings[key] = b;
+                            }
+                        }
+                        if (key === "ref") {
+                            this.refScope.refs[value] = this;
+                        }
                     }
                 }
             }
@@ -388,16 +410,6 @@
 
         postInit: function () {
             // abstract
-        },
-
-        bind: function (eName, cb, scope) {
-
-            var listeners = this.listeners[eName] = this.listeners[eName] || [];
-
-            listeners.push({
-                cb: cb,
-                scope: scope || cb
-            });
         },
 
         _handleBindingChange: function (b, event) {
@@ -476,17 +488,22 @@
         },
 
         render: function () {
-            if (this.el) {
+            if (this.$.hasOwnProperty("each")) {
+                this._renderEach();
+                return null;
+            } else {
+                if (this.el) {
+                    return this.el;
+                }
+
+                this.el = window.document.createElementNS(this.xmlns || NS_XHTML, this.tagName);
+
+                this._renderChildren();
+                this._renderAttributes();
+                this._bindDomEvents();
+
                 return this.el;
             }
-
-            this.el = window.document.createElementNS(this.xmlns || NS_XHTML, this.tagName);
-
-            this._renderAttributes();
-            this._renderChildren();
-            this._bindDomEvents();
-
-            return this.el;
         },
 
         mount: function (el) {
@@ -515,9 +532,17 @@
             for (i = 0; i < this.children.length; i++) {
                 child = this.children[i];
                 child.init();
-                if (child.$.visible == true) {
+                if (child.$.visible) {
                     this._renderChild(child)
                 }
+            }
+        },
+
+        _getRenderScope: function () {
+            if (this.$.hasOwnProperty("each")) {
+                return this.parentScope;
+            } else {
+                return this;
             }
         },
 
@@ -525,29 +550,144 @@
             if (child.render) {
                 var el = child.render();
                 if (el) {
-                    var next = this.getNextRenderedChild(child);
+                    var renderScope = this._getRenderScope();
+                    var next = renderScope.getNextRenderedChild(renderScope === this ? child : this);
                     if (next == null) {
-                        this.el.appendChild(el);
-                        this.renderedChildren.push(child);
+                        renderScope.el.appendChild(el);
+                        renderScope.renderedChildren.push(child);
                     } else {
-                        this.el.insertBefore(el, next.getElement());
-                        var i = this.renderedChildren.indexOf(next);
-                        this.renderedChildren.splice(i - 1, 0, child);
+                        renderScope.el.insertBefore(el, next.getElement());
+                        var i = renderScope.renderedChildren.indexOf(next);
+                        renderScope.renderedChildren.splice(i - 1, 0, child);
                     }
                 }
 
             }
         },
 
+        _renderEach: function () {
+            var i = 0,
+                item,
+                items = this.$.each;
+
+            this.renderedItems = this.renderedItems || [];
+            this.itemMap = this.itemMap || {};
+
+            if (isArray(items)) {
+                for (; items && i < items.length; i++) {
+                    item = items[i];
+                    this._renderEachItem(item, i);
+                }
+            } else if (isObject(items)) {
+                for (var ikey in items) {
+                    if (items.hasOwnProperty(ikey)) {
+                        this._renderEachItem(items[ikey], i, ikey);
+                        i++;
+                    }
+                }
+            }
+
+            while (this.renderedItems.length > i) {
+                var ri = this.renderedItems.pop();
+                item = ri.item;
+                if (item.hasOwnProperty(this.$.idKey)) {
+                    delete this.itemMap[item[this.$.idKey]];
+                }
+                this._removeChild(ri.view);
+                ri.view.destroy();
+            }
+        },
+
+        _renderEachItem: function (item, i, key) {
+            var found = false,
+                remove = [],
+                renderedItems = this.renderedItems;
+
+            for (var j = i; j < renderedItems.length; j++) {
+                var renderedItem = renderedItems[j];
+                if (renderedItem.item !== item) {
+                    remove.push(j);
+                } else {
+                    var s = {};
+                    s[this.$.eachAs || "item"] = item;
+                    s["index"] = i;
+                    renderedItem.view.set(s);
+                    found = true;
+                    break;
+                }
+
+            }
+            var parentScope = this.parentScope;
+            if (found && remove.length > 0) {
+                for (var k = 0; k < remove.length; k++) {
+                    var index = remove[k];
+                    parentScope._removeChild(renderedItems[index].view);
+                }
+                renderedItems.splice(remove[0], remove.length);
+            }
+
+            if (!found) {
+                var child = this._createItemView(item, i, key);
+                child.init();
+                if (i < renderedItems.length - 1) {
+                    var el = child.render();
+                    parentScope.el.insertBefore(el, renderedItems[i].view.el);
+                    var w = parentScope.renderedChildren.indexOf(renderedItems[i].view);
+                    parentScope.renderedChildren.splice(w, 0, child);
+                } else {
+                    this._renderChild(child);
+                }
+
+                var c = {item: item, view: child};
+                renderedItems.splice(i, 0, c);
+                if (item.hasOwnProperty(this.$.idKey)) {
+                    this.itemMap[item[this.$.idKey]] = c;
+                }
+            }
+        },
+
+        _createItemView: function (item, index, key) {
+            var attributes = clone(this.$);
+            attributes[this.$.eachAs || "item"] = item;
+            attributes["index"] = index;
+            attributes["key"] = key;
+
+            delete attributes.each;
+            delete attributes.eachAs;
+
+            if (!this.itemFactory) {
+                var defaults = {};
+                defaults[this.$.eachAs || "item"] = null;
+                defaults["index"] = null;
+                defaults["key"] = null;
+                this.itemFactory = this.factory.inherit({defaults: defaults});
+            }
+
+            return this._createInstance(this.itemFactory, extend({}, attributes), this.outerChildren, this.parentScope, this.rootScope, null);
+        },
+
+        findTemplate: function () {
+            var ret = null;
+            for (var i = 0; i < this.outerChildren.length; i++) {
+                var child = this.outerChildren[i];
+                if (child[0].classof(DomElement)) {
+                    return child;
+                }
+            }
+            return null;
+        },
+
+
         _removeChild: function (child) {
-            this.el.removeChild(child.el);
-            this.renderedChildren.splice(this.renderedChildren.indexOf(child));
+            var renderScope = this._getRenderScope();
+            renderScope.el.removeChild(child.el);
+            renderScope.renderedChildren.splice(renderScope.renderedChildren.indexOf(child),1);
         },
 
         _bindDomEvents: function () {
             for (var k in this.$) {
                 if (this.$.hasOwnProperty(k)) {
-                    if (k.indexOf("on") == 0) {
+                    if (k.indexOf("on") === 0) {
                         var fncName = this.$[k];
                         this._bindDomEventToPath(k, fncName);
                     }
@@ -601,14 +741,14 @@
                     }
                     ret.push(e);
                     try {
-                        fnc.apply(self, ret);
+                        return fnc.apply(self, ret);
                     } catch (e) {
                         console.warn(e);
                     }
                 };
                 this._bindDomEvent(event.substr(2), callback, scope);
             } else {
-                console.warn("couldnt find callback : " + fncName);
+                console.warn("couldn't find handler : " + fncName);
             }
         },
 
@@ -640,11 +780,15 @@
         },
 
         _renderAttribute: function (key, value) {
+            if (this.$.each) {
+                this._renderEach();
+                return;
+            }
             var el = this.el;
             if (!el) {
                 return;
             }
-            if (this.defaults.hasOwnProperty(key) || /^_/.test(key) || key.indexOf("on") == 0 || key == "visible" || key == "ref") {
+            if (this.defaults.hasOwnProperty(key) || /^_/.test(key) || key.indexOf("on") === 0 || key === "visible" || key === "ref") {
                 return;
             }
 
@@ -652,7 +796,7 @@
             if (value == null) {
                 el.removeAttribute(key);
             } else {
-                if (key == "style") {
+                if (key === "style") {
                     var elStyle = el.style;
                     var styles = value.split(";");
                     for (var i = 0; i < styles.length; i++) {
@@ -670,10 +814,10 @@
                     } else {
                         if (this.tagName === "input" && key === "checked") {
                             el.checked = !!value ? "checked" : false;
-                        } else if (this.tagName === "input" && key === "value") {
+                        } else if (/input|select/.test(this.tagName) && key === "value") {
                             el.value = value;
                         } else {
-                            if (value == false) {
+                            if (!value) {
                                 // first set empty -> needed for Chrome
                                 el.setAttribute(key, "");
                                 // then remove -> needed for firefox
@@ -694,11 +838,11 @@
 
         _renderVisible: function (visible) {
             var isVisible = this.el ? this.el.parentNode === this.parentScope.el : false;
-            if (visible == true && !isVisible) {
+            if (visible && !isVisible) {
                 var next = this.parentScope.getNextRenderedChild(this);
 
                 var el = this.render();
-                if (next == null) {
+                if (next === null) {
                     this.parentScope.el.appendChild(el);
                 } else {
                     this.parentScope.el.insertBefore(el, next.getElement());
@@ -761,31 +905,13 @@
         }
     });
 
-    var Application = Component.inherit({
-
-        ctor: function (attributes, children, parentScope, rootScope, refScope) {
-            var context = {
-                app: this,
-                services: {}
-            };
-
-            this.callBase(attributes, children, parentScope, rootScope, refScope, context);
-            for (var key in this.inject) {
-                if (this.inject.hasOwnProperty(key)) {
-
-                }
-            }
-        }
-
-    });
-
-    var DomElement = Component.inherit({
-        defaults: {
-            tagName: "div"
+    var Content = Component.inherit({
+        render: function(){
+           return null;
         }
     });
 
-    var TextElement = DomElement.inherit({
+    var TextElement = Component.inherit({
         render: function () {
             if (this.el) {
                 return this.el;
@@ -798,236 +924,17 @@
             return this.el;
         },
         _renderAttribute: function (key, value) {
-            if (key == "text") {
+            if (key === "text") {
                 this.el.textContent = value;
             }
         }
     });
 
-    var Repeat = Component.inherit({
-        defaults: {
-            itemKey: "item",
-            indexKey: "i",
-            keyKey: 'key',
-            idKey: "id"
-        },
-        ctor: function () {
-            this.itemMap = {};
-            this.renderedItems = [];
-
-            this.callBase();
-        },
-        render: function () {
-            this.callBase();
-
-            return null;
-        },
-
-        _handleBindingChange: function (binding, event) {
-            if (event.data && event.data.listItemChange) {
-                var listItemChange = event.data.listItemChange;
-                if (binding.targetKey === "items") {
-                    if (binding.getValue() === this.$.items && listItemChange.item) {
-                        var renderedChild = this.itemMap[listItemChange.item[this.$.idKey]];
-                        if (renderedChild) {
-                            renderedChild.view.set(this.$.itemKey, listItemChange.item);
-                            return;
-                        }
-                    }
-                }
-            }
-            this.callBase();
-        },
-
-        _renderItem: function (item, i, key) {
-            var found = false,
-                remove = [],
-                renderedItems = this.renderedItems;
-
-            for (var j = i; j < renderedItems.length; j++) {
-                var renderedItem = renderedItems[j];
-                if (renderedItem.item !== item) {
-                    remove.push(j);
-                } else {
-                    var s = {};
-                    s[this.$.itemKey] = item;
-                    s[this.$.indexKey] = i;
-                    renderedItem.view.set(s);
-                    found = true;
-                    break;
-                }
-
-            }
-            var parentScope = this.parentScope;
-            if (found && remove.length > 0) {
-                for (var k = 0; k < remove.length; k++) {
-                    var index = remove[k];
-                    parentScope._removeChild(renderedItems[index].view);
-                }
-                renderedItems.splice(remove[0], remove.length);
-            }
-
-            if (!found) {
-                var child = this.createChildInstanceForItem(item, index, key);
-                child.init();
-                if (i < renderedItems.length - 1) {
-                    var el = child.render();
-                    parentScope.el.insertBefore(el, renderedItems[i].view.el);
-                    var w = parentScope.renderedChildren.indexOf(renderedItems[i].view);
-                    parentScope.renderedChildren.splice(w, 0, child);
-                } else {
-                    this._renderChild(child);
-                }
-
-                var c = {item: item, view: child};
-                renderedItems.splice(i, 0, c);
-                if (item.hasOwnProperty(this.$.idKey)) {
-                    this.itemMap[item[this.$.idKey]] = c;
-                }
-            }
-        },
-
-        _getRenderedItemByIndex: function (i) {
-            for (var j = 0; j < this.renderedItems.length; j++) {
-                var item = this.renderedItems[j];
-                if (item.index === i) {
-                    return item;
-                }
-            }
-
-            return null;
-
-        },
-
-        _findRenderedChild: function (item) {
-            if (item.hasOwnProperty(this.$.idKey)) {
-                return this.itemMap[item[this.$.idKey]];
-            }
-            return null;
-        },
-
-        _findRenderedItem: function (item) {
-            if (item.hasOwnProperty(this.$.idKey)) {
-                return this.itemMap[item[this.$.idKey]];
-            }
-
-            for (var i = 0; i < this.renderedItems.length; i++) {
-                var renderedItem = this.renderedItems[i];
-                if (renderedItem.item === item) {
-                    return renderedItem;
-                }
-            }
-        },
-
-        _saveRenderedItem: function (item, view, index) {
-            var renderedItem = {
-                item: item,
-                view: view
-            };
-
-            if (item.hasOwnProperty(this.$.idKey)) {
-                this.itemMap[item[this.$.idKey]] = renderedItem;
-            }
-
-            return renderedItem;
-        },
-
-        _renderAttribute: function (key, value) {
-            if (key == "items") {
-                var i = 0,
-                    item,
-                    items = this.$.items;
-
-                if (isArray(items)) {
-                    for (; items && i < items.length; i++) {
-                        item = items[i];
-                        this._renderItem(item, i);
-                    }
-                } else if (isObject(items)) {
-                    for (var ikey in items) {
-                        if (items.hasOwnProperty(ikey)) {
-                            this._renderItem(items[ikey], i, ikey);
-                            i++;
-                        }
-                    }
-                }
-
-                while (this.renderedItems.length > i) {
-                    var ri = this.renderedItems.pop();
-                    item = ri.item;
-                    if (item.hasOwnProperty(this.$.idKey)) {
-                        delete this.itemMap[item[this.$.idKey]];
-                    }
-                    this._removeChild(ri.view);
-                    ri.view.destroy();
-                }
-            }
-        },
-
-        _renderChild: function (child) {
-            if (child.render) {
-                var el = child.render();
-                if (el) {
-                    var parentScope = this.parentScope;
-                    var next = parentScope.getNextRenderedChild(this);
-                    if (next == null) {
-                        parentScope.el.appendChild(el);
-                        parentScope.renderedChildren.push(child);
-                    } else {
-                        parentScope.el.insertBefore(el, next.getElement());
-                        var i = parentScope.renderedChildren.indexOf(next);
-                        this.renderedChildren.splice(i - 1, 0, child);
-                    }
-                }
-
-            }
-        },
-
-        isMounted: function () {
-            return this.renderedItems.length > 0;
-        },
-
-        getElement: function () {
-            return this.renderedItems.length > 0 ? this.renderedItems[0].view.el : null;
-        },
-
-        _removeChild: function (child) {
-            this.parentScope._removeChild(child);
-        },
-
-        _renderChildren: function () {
-
-        },
-
-        createChildInstanceForItem: function (item, index, key) {
-            var attributes = {};
-            attributes[this.$.itemKey] = item;
-            attributes[this.$.indexKey] = index;
-            attributes[this.$.keyKey] = key;
-
-            var tpl = this.findTemplate();
-            this.itemFactory = this.itemFactory || tpl[0].inherit({defaults: attributes});
-            return this._createInstance(this.itemFactory, extend(attributes, tpl[1]), tpl[2], this.parentScope, this.rootScope, null);
-        },
-
-        findTemplate: function () {
-            var ret = null;
-            for (var i = 0; i < this.outerChildren.length; i++) {
-                var child = this.outerChildren[i];
-                if (child[0].classof(DomElement)) {
-                    return child;
-                }
-            }
-            return null;
-        }
-    });
-
     var r = {};
 
+    r.Content = Content;
     r.Component = Component;
-    r.DomElement = DomElement;
     r.TextElement = TextElement;
-    r.Repeat = Repeat;
     r.EventDispatcher = EventDispatcher;
 
     for (var element in r) {

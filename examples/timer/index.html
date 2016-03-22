@@ -13,9 +13,9 @@
 
 <script type="text/rml" src="./Timer.rml"></script>
 <script type="text/javascript">
-    var Timer = rCompiler.compile("Timer");
+    var f = rCompiler.compile();
 
-    var timer = new Timer({time: 2});
+    var timer = new f.Timer({time: 2});
 
     // mount the timer instance
     timer.mount(document.getElementById("timerApp"));

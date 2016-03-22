@@ -1,4 +1,4 @@
-<r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
+<div xmlns="http://www.w3.org/1999/xhtml">
     <script>
         var rAction = require("rAction");
         var Store = require("./1024Store");
@@ -66,4 +66,4 @@
         };
     </script>
 
-</r:DomElement>
+</div>

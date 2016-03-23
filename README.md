@@ -23,7 +23,7 @@ Components are described via RML which lets you combine HTML markup and Javascri
 The following example shows a timer component:
 
 ```xml
-<r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
+<div xmlns="http://www.w3.org/1999/xhtml">
    <div class="time">{time}</div>
    <button onclick="start" disabled="{started}">Start</button>
    <button onclick="stop" disabled="{!started}">Stop</button>
@@ -57,7 +57,7 @@ The following example shows a timer component:
            }
        };
    </script>
-</r:DomElement>
+</div>
 ```
 
 The first tag defines from which class this component inherits.

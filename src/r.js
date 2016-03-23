@@ -318,6 +318,7 @@
             });
             this.mixins = this.mixins || [];
             this.initialized = false;
+            this.rendered = false;
             this.bindings = {};
             this.listeners = {};
             this.children = [];
@@ -398,10 +399,9 @@
                         }
                     }
                 }
+                this._createChildren(this.defaultChildren, this, this, this);
+                this._createChildren(this.outerChildren, this, this.rootScope, this.refScope);
             }
-
-            this._createChildren(this.defaultChildren, this, this, this);
-            this._createChildren(this.outerChildren, this, this.rootScope, this.refScope);
 
             this.initialized = true;
 
@@ -463,6 +463,7 @@
             for (var i = 0; i < children.length; i++) {
                 var child = children[i];
                 var childInstance = this._createInstance(child[0], copy(child[1]), child[2], parentScope, rootScope, refScope);
+                childInstance.init();
                 this.children.push(childInstance);
             }
         },
@@ -496,11 +497,19 @@
                     return this.el;
                 }
 
+                for (var k in this.bindings) {
+                    if (this.bindings.hasOwnProperty(k)) {
+                        this.$[k] = this.bindings[k].getValue();
+                    }
+                }
+
                 this.el = window.document.createElementNS(this.xmlns || NS_XHTML, this.tagName);
 
-                this._renderChildren();
                 this._renderAttributes();
+                this._renderChildren();
                 this._bindDomEvents();
+
+                this.rendered = true;
 
                 return this.el;
             }
@@ -531,10 +540,12 @@
                 i;
             for (i = 0; i < this.children.length; i++) {
                 child = this.children[i];
-                child.init();
                 if (child.$.visible) {
                     this._renderChild(child)
                 }
+            }
+            if(this.tagName === "select") {
+                this._renderAttribute("value", this.$.value);
             }
         },
 
@@ -544,6 +555,10 @@
             } else {
                 return this;
             }
+        },
+
+        getRef: function (name) {
+            return this.refs[name];
         },
 
         _renderChild: function (child) {
@@ -560,6 +575,7 @@
                         var i = renderScope.renderedChildren.indexOf(next);
                         renderScope.renderedChildren.splice(i - 1, 0, child);
                     }
+                    child.renderScope = renderScope;
                 }
 
             }
@@ -634,6 +650,7 @@
                     parentScope.el.insertBefore(el, renderedItems[i].view.el);
                     var w = parentScope.renderedChildren.indexOf(renderedItems[i].view);
                     parentScope.renderedChildren.splice(w, 0, child);
+                    child.renderScope = parentScope;
                 } else {
                     this._renderChild(child);
                 }
@@ -681,7 +698,7 @@
         _removeChild: function (child) {
             var renderScope = this._getRenderScope();
             renderScope.el.removeChild(child.el);
-            renderScope.renderedChildren.splice(renderScope.renderedChildren.indexOf(child),1);
+            renderScope.renderedChildren.splice(renderScope.renderedChildren.indexOf(child), 1);
         },
 
         _bindDomEvents: function () {
@@ -704,10 +721,11 @@
                 if (param.key === "event") {
                     continue;
                 }
-                scope = this.findScopeForFnc(param.key);
+                scope = this.rootScope[param.key] ? this.rootScope : null;
                 if (!scope) {
                     scope = this.findScopeForKey(param.key);
                 } else {
+                    scope.bind(this.rootScope);
                     param.type = "fnc";
                 }
                 if (scope) {
@@ -780,8 +798,12 @@
         },
 
         _renderAttribute: function (key, value) {
-            if (this.$.each) {
+            if (key === "each" && this.parentScope.el) {
                 this._renderEach();
+                return;
+            }
+            if (key === "visible") {
+                this._renderVisible();
                 return;
             }
             var el = this.el;
@@ -792,6 +814,7 @@
                 return;
             }
 
+            var i;
 
             if (value == null) {
                 el.removeAttribute(key);
@@ -799,7 +822,7 @@
                 if (key === "style") {
                     var elStyle = el.style;
                     var styles = value.split(";");
-                    for (var i = 0; i < styles.length; i++) {
+                    for (i = 0; i < styles.length; i++) {
                         var style = styles[i];
                         if (style) {
                             var styleDef = style.split(":");
@@ -808,6 +831,18 @@
                             }).replace(/^\s+|\s+$/, "")] = styleDef[1];
                         }
                     }
+                } else if (key === "children") {
+                    // clear children, don't destroy
+                    while (this.renderedChildren.length > 0) {
+                        this._removeChild(this.renderedChildren[0]);
+                    }
+
+                    for (i = 0; i < value.length; i++) {
+                        var child = value[i];
+                        child.init();
+                        this._renderChild(child);
+                    }
+
                 } else {
                     if (/^data/.test(key)) {
                         el.setAttribute(key, value);
@@ -836,19 +871,22 @@
 
         },
 
-        _renderVisible: function (visible) {
-            var isVisible = this.el ? this.el.parentNode === this.parentScope.el : false;
-            if (visible && !isVisible) {
-                var next = this.parentScope.getNextRenderedChild(this);
-
-                var el = this.render();
-                if (next === null) {
-                    this.parentScope.el.appendChild(el);
-                } else {
-                    this.parentScope.el.insertBefore(el, next.getElement());
+        _renderVisible: function () {
+            var visible = this.$.visible;
+            if (this.rendered && !visible) {
+                if (this.parentScope.rendered) {
+                    var renderScope = this.parentScope._getRenderScope();
+                    if (!visible && this.el && this.el.parentNode === renderScope.el) {
+                        this.parentScope._removeChild(this);
+                    } else if (visible && this.el && renderScope.el && this.el.parentNode !== renderScope.el) {
+                        //this.parentScope._renderChild(this);
+                    }
                 }
-            } else if (isVisible && !visible) {
-                this.parentScope.el.removeChild(this.el);
+            } else if (visible) {
+                if(this.parentScope.rendered) {
+                    this.parentScope._renderChild(this);
+                }
+
             }
         },
 
@@ -886,11 +924,7 @@
 
             for (var k in attributes) {
                 if (attributes.hasOwnProperty(k)) {
-                    if (k === "visible") {
-                        this._renderVisible(attributes[k]);
-                    } else {
-                        this._renderAttribute(k, attributes[k]);
-                    }
+                    this._renderAttribute(k, attributes[k]);
                 }
             }
 
@@ -906,8 +940,8 @@
     });
 
     var Content = Component.inherit({
-        render: function(){
-           return null;
+        render: function () {
+            return null;
         }
     });
 
@@ -924,6 +958,9 @@
             return this.el;
         },
         _renderAttribute: function (key, value) {
+            if (!this.el) {
+                return;
+            }
             if (key === "text") {
                 this.el.textContent = value;
             }

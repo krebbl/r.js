@@ -2,15 +2,13 @@
 
     <ul class="tab-menu">
         <li>
-            <a onclick="showTab('tab-1')">Tab 1</a>
+            <a class="{currentTab === 'tab-1' ? 'selected' : ''}" onclick="showTab('tab-1')">Tab 1</a>
         </li>
         <li>
-            <a onclick="showTab('tab-2')">Tab 2</a>
+            <a class="{currentTab === 'tab-2' ? 'selected' : ''}" onclick="showTab('tab-2')">Tab 2</a>
         </li>
     </ul>
-    <div ref="tabContainer">
-
-    </div>
+    <div class="tab-content" children="{getRef(currentTab).children}"></div>
 
     <r:Content ref="tab-1">
         <div>Hello World :)</div>
@@ -24,26 +22,12 @@
     <script type="text/javascript">
     //<![CDATA[
         exports = {
+            defaults: {
+                currentTab: "tab-2"
+            },
+
             showTab: function (ref) {
-
-                var content = this.refs[ref];
-
-                if (content) {
-                    var container = this.refs["tabContainer"];
-
-                    // clear children, don't destroy
-                    while (container.renderedChildren.length > 0) {
-                        container._removeChild(container.renderedChildren[0]);
-                    }
-
-                    for (var i = 0; i < content.children.length; i++) {
-                        var child = content.children[i];
-                        child.init();
-                        container._renderChild(child);
-                    }
-
-
-                }
+                this.set('currentTab', ref);
             }
         };
         //]]>

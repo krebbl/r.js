@@ -44,7 +44,6 @@
             },
             submit: function(e){
                 e.preventDefault();
-                console.log(e.target.elements);
                 return false;
 
             }

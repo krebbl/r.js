@@ -2,6 +2,7 @@ define(["r", "rAction", "underscore"], function (r, rAction, _) {
 
     return rAction.Store.inherit({
         defaults: {
+            activeFilter: "",
             todos: {},
             loadingTodos: false
         },
@@ -55,6 +56,21 @@ define(["r", "rAction", "underscore"], function (r, rAction, _) {
             todo.title = payload.title;
 
             this.emit("change", {listItemChange: {item: todo}});
+        },
+
+        filterTodos: function(payload){
+            this.activeFilter = payload.filter;
+        },
+
+        filteredTodos: function(){
+            if(!this.activeFilter) {
+                return this.todos;
+            }
+            var filter = this.activeFilter;
+            return _.filter(this.todos, function(t){
+                return filter === "completed" && t.completed || filter === "active" && !t.completed
+            });
+
         },
 
         clearCompleted: function () {

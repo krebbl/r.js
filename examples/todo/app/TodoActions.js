@@ -18,6 +18,9 @@ define(["rAction"], function (rAction) {
             checkAll: {
                 completed: true
             },
+            filterTodos: {
+                filter: ""
+            },
             updateTitle: {
                 id: "",
                 title: ""

@@ -6,6 +6,10 @@
         var rAction = require("rAction");
         var TodoStore = require("./TodoStore");
         var TodoActions = require("./TodoActions");
+        var Router = require("../../libs/router");
+        var router = new Router();
+
+
 
         // init executor
         var executor = new rAction.Executor();
@@ -16,6 +20,14 @@
 
         // add store to executor
         executor.addStore(todoStore);
+
+        router.addRoute("#/:filter", function (req, next) {
+            TA.filterTodos({filter: req.get("filter")});
+        });
+
+        router.addRoute("#/", function(){
+            TA.filterTodos({filter: ""});
+        });
 
         exports = {
             // mixin todoStore
@@ -38,6 +50,7 @@
 
             postInit: function () {
                 TA.loadTodos();
+                router.run();
             },
 
             allCompleted: function (items) {
@@ -77,6 +90,9 @@
             clearCompleted: function () {
                 TA.clearCompleted();
             },
+//            filter: function (filter) {
+//                TA.filterTodos({filter: filter});
+//            },
 
             startEditing: function (item, event) {
                 this.set('editingTodo', item);

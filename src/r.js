@@ -260,7 +260,9 @@
             try {
                 return this.f.apply(this.component, this.evaluateParams());
             } catch (e) {
-                console.warn(e);
+                if (r.mode === "DEBUG") {
+                    console.warn(e);
+                }
                 return null;
             }
         },
@@ -525,6 +527,42 @@
             }
 
             this.emit('mount');
+            this._onMount();
+        },
+
+        componentDidMount: function () {
+            // abstract
+        },
+
+        componentDidUnmount: function () {
+            // abstract
+        },
+
+        _onMount: function () {
+            this.mounted = true;
+            this.componentDidMount();
+            this._notifyChildren("mount");
+        },
+
+        _onUnmount: function () {
+            this.mounted = false;
+            this.componentDidUnmount();
+            this._notifyChildren("unmount")
+        },
+
+        _notifyChildren: function (type) {
+            for (var i = 0; i < this.renderedChildren.length; i++) {
+                var child = this.renderedChildren[i];
+                if (type == "mount") {
+                    if (!child.mounted) {
+                        child._onMount();
+                    }
+                } else if (type == "unmount") {
+                    if (child.mounted) {
+                        child._onUnmount();
+                    }
+                }
+            }
         },
 
         _renderAttributes: function () {
@@ -544,7 +582,7 @@
                     this._renderChild(child)
                 }
             }
-            if(this.tagName === "select") {
+            if (this.tagName === "select") {
                 this._renderAttribute("value", this.$.value);
             }
         },
@@ -576,6 +614,9 @@
                         renderScope.renderedChildren.splice(i - 1, 0, child);
                     }
                     child.renderScope = renderScope;
+                    if (renderScope.mounted) {
+                        child._onMount();
+                    }
                 }
 
             }
@@ -651,6 +692,9 @@
                     var w = parentScope.renderedChildren.indexOf(renderedItems[i].view);
                     parentScope.renderedChildren.splice(w, 0, child);
                     child.renderScope = parentScope;
+                    if (parentScope.mounted) {
+                        child._onMount();
+                    }
                 } else {
                     this._renderChild(child);
                 }
@@ -699,6 +743,8 @@
             var renderScope = this._getRenderScope();
             renderScope.el.removeChild(child.el);
             renderScope.renderedChildren.splice(renderScope.renderedChildren.indexOf(child), 1);
+            child.renderScope = null;
+            child._onUnmount();
         },
 
         _bindDomEvents: function () {
@@ -761,7 +807,9 @@
                     try {
                         return fnc.apply(self, ret);
                     } catch (e) {
-                        console.warn(e);
+                        if (r.mode == "DEBUG") {
+                            console.warn(e);
+                        }
                     }
                 };
                 this._bindDomEvent(event.substr(2), callback, scope);
@@ -883,20 +931,34 @@
                     }
                 }
             } else if (visible) {
-                if(this.parentScope.rendered) {
-                    this.parentScope._renderChild(this);
+                if (this.parentScope.rendered) {
+                    if (!this.el || this.el.parentNode !== this.parentScope._getRenderScope().el) {
+                        this.parentScope._renderChild(this);
+                    }
                 }
 
             }
         },
 
-
-        _bindDomEvent: function (event, handler, scope) {
+        _bindDomEvent: function (event, handler, scope, useCapture) {
             var self = this;
-            this.el.addEventListener(event, function (e) {
+            var cb = function(e){
                 e.srcView = self;
-                handler.call(scope, e);
-            });
+                return handler.call(scope, e);
+            };
+            // check if event is a dom event
+            if(("on" + event ) in this.el) {
+                if (this.el.attachEvent) {
+                    if (!useCapture) {
+                        this.el.attachEvent("on" + event, cb);
+                    }
+                } else {
+                    this.el.addEventListener(event, cb, useCapture);
+                }
+            } else {
+                // if not, bind it as a normal event
+                this.bind("on" + event, cb);
+            }
 
         },
         set: function (key, value) {

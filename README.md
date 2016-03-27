@@ -23,7 +23,7 @@ Components are described via RML which lets you combine HTML markup and Javascri
 The following example shows a timer component:
 
 ```xml
-<div xmlns="http://www.w3.org/1999/xhtml">
+<div xmlns="http://www.w3.org/1999/xhtml" class="timer-app">
    <div class="time">{time}</div>
    <button onclick="start" disabled="{started}">Start</button>
    <button onclick="stop" disabled="{!started}">Stop</button>
@@ -31,14 +31,13 @@ The following example shows a timer component:
    <!-- The script tag contains the logic for the component e.g. EventHandler, defaults -->
    <script type="text/javascript">
        exports = {
-           // default attributes
+           // default attributes for the component
            defaults: {
                time: 0,
                started: false
            },
-           // defaults for the node
+           // default attributes for the rendered DOM node
            nodeDefaults: {
-               className: "timer-app"
            },
            // event handler
            start: function () {
@@ -60,8 +59,8 @@ The following example shows a timer component:
 </div>
 ```
 
-The first tag defines from which class this component inherits.
-In this case we inherit from the core class DomElement.
+The first tag defines the base component from which this component inherits.
+In this case its a simple "div".
 
 The script tag contains all the logic of a component like event handlers and default attributes.
 To tell the component that it's state has changed we call the set method.

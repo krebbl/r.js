@@ -1,4 +1,4 @@
-<r:DomElement xmlns:r="r" xmlns="http://www.w3.org/1999/xhtml">
+<div xmlns="http://www.w3.org/1999/xhtml">
     <div class="time">{time}</div>
     <button onclick="start" disabled="{started}">Start</button>
     <button onclick="stop" disabled="{!started}">Stop</button>
@@ -30,4 +30,4 @@
             }
         };
     </script>
-</r:DomElement>
+</div>

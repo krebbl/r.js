@@ -13,12 +13,13 @@
 
 <script type="text/rml" src="./Timer.rml"></script>
 <script type="text/javascript">
-    var f = rCompiler.compile();
+    rCompiler.compile(function(f){
+        var timer = new f.Timer({time: 2});
 
-    var timer = new f.Timer({time: 2});
+        // mount the timer instance
+        timer.mount(document.getElementById("timerApp"));
+    });
 
-    // mount the timer instance
-    timer.mount(document.getElementById("timerApp"));
 </script>
 </body>
 </html>

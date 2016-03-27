@@ -16,11 +16,18 @@ I wanted to create one with the following key criterias.
 * Usage of XML namespacing for resolving custom tags
 * Virtual DOM
 
-## How do you define a component?
 
-Components are described via RML which lets you combine HTML markup and Javascript.
+## Lets get started.
 
-The following example shows a timer component:
+r.js is meant to be a component-based render library.
+So every component can be reused inside other components.
+
+
+### Define a component
+
+Components are defined via RML which lets you combine HTML markup and Javascript.
+
+The following example shows a simple timer component:
 
 ```xml
 <div xmlns="http://www.w3.org/1999/xhtml" class="timer-app">
@@ -62,11 +69,43 @@ The following example shows a timer component:
 The first tag defines the base component from which this component inherits.
 In this case its a simple "div".
 
-The script tag contains all the logic of a component like event handlers and default attributes.
-To tell the component that it's state has changed we call the set method.
-After this all changes are rendered to the DOM.
+The script tag contains all the logic like event handlers and default attributes.
+To tell the component that it's state has changed we call the "set" method.
+This will trigger an update routine which renders all changes to the DOM.
 
 
+### Use a component
+
+The simplest way to include a component is to require it via a script tag and run the RML-compiler like this:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Timer Example</title>
+    <script src="./r/inherit.js" type="text/javascript" id="inheritScript"></script>
+    <script src="./r/r.js" type="text/javascript"></script>
+    <script src="./r/rCompiler.js" type="text/javascript"></script>
+</head>
+<body>
+
+<div id="timerApp"/>
+
+<script type="text/rml" src="./Timer.rml"></script>
+<script type="text/javascript">
+    // compiles all RML components to factories
+    var f = rCompiler.compile();
+
+    // create a new timer instance
+    var timer = new f.Timer({time: 2});
+
+    // mount the new instance
+    timer.mount(document.getElementById("timerApp"));
+</script>
+</body>
+</html>
+```
 
 
 ## Documentation

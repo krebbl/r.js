@@ -1,9 +1,4 @@
 (function (window, r) {
-    var attributeMap = {
-        "class": "className",
-        "for": "htmlFor"
-    };
-
     var fs, createXhr,
         progIds = ['Msxml2.XMLHTTP', 'Microsoft.XMLHTTP', 'Msxml2.XMLHTTP.4.0'];
 
@@ -43,18 +38,20 @@
     var resolveAttributes = function (node) {
         var attributes = {};
 
-        if (!node.namespaceURI || node.namespaceURI == "http://www.w3.org/1999/xhtml") {
-            attributes["tagName"] = node.tagName;
-        }
 
         if (node.nodeType == 1) {
+            if (node.namespaceURI && node.namespaceURI.indexOf("http://www.w3.org/") === 0) {
+                attributes["tagName"] = node.tagName;
+                attributes["xmlns"] = node.namespaceURI;
+            }
+
             for (var i = 0; i < node.attributes.length; i++) {
                 var attribute = node.attributes[i];
-                attributes[attributeMap[attribute.localName] || attribute.localName] = attribute.nodeValue;
+                attributes[attribute.localName] = attribute.nodeValue;
 
             }
         } else if (node.nodeType == 3) {
-            attributes["text"] = node.nodeValue.replace(/^(\s|\t|\r)+\n/, "").replace(/\n(\s|\t|\r)+$/, "");
+            attributes["text"] = node.nodeValue.replace(/\n/g, " ");
         }
 
         return attributes;
@@ -77,19 +74,23 @@
         if (node.nodeType == 3) {
             return factoryMap.r.TextElement;
         }
-        if (!node.namespaceURI || node.namespaceURI == "http://www.w3.org/1999/xhtml" && node.nodeType == 1) {
-            return factoryMap.r.DomElement;
+        if (node.namespaceURI.indexOf("http://www.w3.org") === 0 && node.nodeType == 1) {
+            return factoryMap.r.Component;
         }
         if (node.namespaceURI == "r") {
             //var dependency = getDependency(node.namespaceURI, localNameFromDomNode(node));
             return factoryMap.r[node.localName];
         }
 
-        return factoryMap[node.namespaceURI.replace(/\./g, "/") + "/" + node.localName];
+        return factoryMap["rml!" + node.namespaceURI.replace(/\./g, "/") + "/" + node.localName];
     };
 
     var nodeToDescription = function (node, factoryMap) {
         if (node.nodeType == 8 || (node.nodeType == 3 && node.nodeValue.replace(/^(\s|\t|\r)+$/, "").length == 0)) {
+            return null;
+        }
+
+        if (node.localName === "script" && node.namespaceURI.indexOf("http://www.w3.org") > -1) {
             return null;
         }
 
@@ -142,14 +143,15 @@
         var url = node.src;
         try {
             xhr = createXhr();
-            xhr.open('GET', url, false);
+            xhr.open('GET', url);
             xhr.onreadystatechange = function () {
                 if (xhr.readyState === 4) {
                     if (xhr.status === 200 || xhr.status === 304) {
                         if (xhr.responseText) {
                             var parser = new DOMParser();
-                            var xmlDoc = parser.parseFromString(xhr.responseText.replace(/&/g, "&amp;"), "text/xml");
-                            callback(null, xmlDoc);
+                            var text = xhr.responseText.replace(/(<script[^>]+>)/, "$1\n  //<![CDATA[").replace(/(<\/script>)/, "//]]>\n$1");
+                            var xmlDoc = parser.parseFromString(text.replace(/&/g, "&amp;"), "text/xml");
+                            callback(null, xmlDoc.documentElement);
                         } else {
                             callback("no responseXML found");
                         }
@@ -178,39 +180,53 @@
         callback(ret);
     };
 
+    var forEach = function (elements, fnc, cb) {
+        var next = null;
+        var i = -1;
+        var element = elements[i];
+
+        var done = function () {
+            callNext();
+        };
+
+        var callNext = function () {
+            i++;
+            if (i < elements.length) {
+                element = elements[i];
+                fnc(element, done);
+            } else {
+                cb();
+            }
+        };
+
+        callNext();
+    };
+
     window.rCompiler = {
-        compile: function () {
+        compile: function (callback) {
             var scripts = window.document.getElementsByTagName("script");
-            for (var i = 0; i < scripts.length; i++) {
-                var script = scripts[i];
+            forEach(scripts, function (script, done) {
                 if (script.type === "text/rml") {
-                    var name = script.src;
+                    var match = script.src.match(/(\w+)\.rml$/);
+                    var name = match[1];
                     loadScript(script, function (err, node) {
                         if (!err) {
                             var so = evaluateScript(name, node, require, function (scriptObj) {
-                                var f = nodeToFactory(node, factoryMap, scriptObj);
-                                factoryMap[name] = f;
+                                factoryMap[name] = nodeToFactory(node, factoryMap, scriptObj);
+                                done();
                             });
+                        } else {
+                            done();
                         }
                     });
+                } else {
+                    done();
                 }
-            }
+            }, function () {
+                callback(factoryMap);
+            });
 
-            return factoryMap;
 
-        },
-        createClass: function (BaseClass, logic, tpl) {
-            logic.defaultChildren = this.txtToChildren(tpl);
-
-            return BaseClass.inherit(logic);
-        },
-        tplToChildren: function (tplId, fMap) {
-            return this.txtToChildren(document.getElementById(tplId).textContent, factoryMap);
-        },
-        txtToChildren: function (txt, fMap) {
-            var parser = new DOMParser();
-            var xmlDoc = parser.parseFromString(txt.replace(/&/g, "&amp;"), "text/xml");
-            return nodeToDescription(xmlDoc.documentElement, factoryMap)[2];
         }
     }
 })(window, r);

@@ -83,7 +83,7 @@ The simplest way to include a component is to require it via a script tag and ru
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Timer Example</title>
+    <title></title>
     <script src="./r/inherit.js" type="text/javascript" id="inheritScript"></script>
     <script src="./r/r.js" type="text/javascript"></script>
     <script src="./r/rCompiler.js" type="text/javascript"></script>
@@ -94,14 +94,12 @@ The simplest way to include a component is to require it via a script tag and ru
 
 <script type="text/rml" src="./Timer.rml"></script>
 <script type="text/javascript">
-    // compiles all RML components to factories
-    var f = rCompiler.compile();
+    rCompiler.compile(function(f){
+        var timer = new f.Timer({time: 2});
 
-    // create a new timer instance
-    var timer = new f.Timer({time: 2});
-
-    // mount the new instance
-    timer.mount(document.getElementById("timerApp"));
+        // mount the timer instance
+        timer.mount(document.getElementById("timerApp"));
+    });
 </script>
 </body>
 </html>
